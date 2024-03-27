@@ -1,8 +1,11 @@
-use std::net;
+use std::{fmt, net, str::FromStr};
 
+use serde::{de, Deserialize, Deserializer};
+
+use rand::prelude::*;
 use axum::{
-	extract::{Path, State},
-	http::StatusCode,
+	extract::{Path, Query, State},
+		http::StatusCode,
 	response::{IntoResponse, Response},
 	routing::get,
 	Json, Router,
@@ -26,6 +29,30 @@ pub struct ServerConfig {
 	#[arg(long)]
 	pub redis: url::Url,
 }
+
+
+#[derive(Deserialize)]
+struct OriginParams {
+	#[serde(default, deserialize_with = "empty_string_as_none")]
+	next_relays: Option<String>,
+}
+
+/// Serde deserialization decorator to map empty Strings to None,
+fn empty_string_as_none<'de, D, T>(de: D) -> Result<Option<T>, D::Error>
+where
+	D: Deserializer<'de>,
+	T: FromStr,
+	T::Err: fmt::Display,
+{
+	let opt = Option::<String>::deserialize(de)?;
+	match opt.as_deref() {
+		None | Some("") => Ok(None),
+		Some(s) => FromStr::from_str(s).map_err(de::Error::custom).map(Some),
+	}
+}
+
+
+
 
 pub struct Server {
 	config: ServerConfig,
@@ -68,13 +95,33 @@ impl Server {
 async fn get_origin(
 	Path(id): Path<String>,
 	State(mut redis): State<ConnectionManager>,
+	Query(params): Query<OriginParams>,
+
 ) -> Result<Json<Origin>, AppError> {
 	let key = origin_key(&id);
 
 	let payload: Option<String> = redis.get(&key).await?;
 	let payload = payload.ok_or(AppError::NotFound)?;
-	let origin: Origin = serde_json::from_str(&payload)?;
 
+	if let Some(next_relays_string) = params.next_relays {
+		let next_relays = parse_relay_urls(next_relays_string)?;
+
+		// Choose from provided next relays
+		// For now this choice is random to serve as a load balancing method,
+		// but this is where we can implement data-based routing to make smarter
+		// decisions within the cluster
+		let chosen_relay = next_relays
+			.choose(&mut rand::thread_rng())
+			.expect("next_relays vec empty despite parameter validation");
+
+		let next_url = chosen_relay.join(&id)?;
+
+		let origin = Origin { url: next_url };
+		return Ok(Json(origin));
+	}
+
+	let origin: Origin = serde_json::from_str(&payload)?;
+	log::debug!("Forwarding to origin: {}", origin.url.as_str());
 	Ok(Json(origin))
 }
 
@@ -143,6 +190,21 @@ fn origin_key(id: &str) -> String {
 	format!("origin.{}", id)
 }
 
+
+// Parse a list of URLs separated by commas
+fn parse_relay_urls(url_list_string: String) -> Result<Vec<url::Url>, url::ParseError> {
+	let mut urls = Vec::new();
+	for url_str in url_list_string.split(',') {
+		let url = url_str.parse::<url::Url>()?;
+		urls.push(url);
+	}
+
+	Ok(urls)
+}
+
+
+
+
 #[derive(thiserror::Error, Debug)]
 enum AppError {
 	#[error("redis error")]
@@ -156,6 +218,10 @@ enum AppError {
 
 	#[error("duplicate ID")]
 	Duplicate,
+
+
+	#[error("url error in parameter: {0}")]
+	Parameter(#[from] url::ParseError),
 }
 
 // Tell axum how to convert `AppError` into a response.
@@ -166,6 +232,7 @@ impl IntoResponse for AppError {
 			AppError::Json(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("json error: {}", e)).into_response(),
 			AppError::NotFound => StatusCode::NOT_FOUND.into_response(),
 			AppError::Duplicate => StatusCode::CONFLICT.into_response(),
+			AppError::Parameter(e) => (StatusCode::BAD_REQUEST, format!("parameter error: {}", e)).into_response(),
 		}
 	}
 }
