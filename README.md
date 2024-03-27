@@ -2,7 +2,9 @@ This is only a modified version of the not up to date repo.
 
 Kind of like 6a2bf647ecd8e5cf97e8c8d34cde86f846ae38da of moq-rs combined with https://github.com/kixelated/moq-rs/pull/118
 
-31623d4..a52e448 is the working moq-js version
+31623d4..a52e448 is the working moq-js version 
+
+git checkout 31623d4
 
 
 <p align="center">
