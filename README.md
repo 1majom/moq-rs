@@ -1,3 +1,10 @@
+This is only a modified version of the not up to date repo.
+
+Kind of like 6a2bf647ecd8e5cf97e8c8d34cde86f846ae38da of moq-rs combined with https://github.com/kixelated/moq-rs/pull/118
+
+31623d4..a52e448 is the working moq-js version
+
+
 <p align="center">
 	<img height="128px" src="https://github.com/kixelated/moq-rs/blob/main/.github/logo.svg" alt="Media over QUIC">
 </p>
