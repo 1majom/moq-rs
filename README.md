@@ -1,11 +1,11 @@
-<p align="center">
-	<img height="128px" src="https://github.com/kixelated/moq-rs/blob/main/.github/logo.svg" alt="Media over QUIC">
-</p>
-
-
 
 ### w/ moq-js: 53645b17ff4de404cacee805607dcabd2021a608
 
+
+
+<p align="center">
+	<img height="128px" src="https://github.com/kixelated/moq-rs/blob/main/.github/logo.svg" alt="Media over QUIC">
+</p>
 
 Media over QUIC (MoQ) is a live media delivery protocol utilizing QUIC streams.
 See [quic.video](https://quic.video) for more information.
