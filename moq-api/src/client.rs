@@ -8,16 +8,18 @@ pub struct Client {
 	url: Url,
 
 	client: reqwest::Client,
+
+	the_type: u16,
 }
 
 impl Client {
-	pub fn new(url: Url) -> Self {
+	pub fn new(url: Url, the_type: &u16) -> Self {
 		let client = reqwest::Client::new();
-		Self { url, client }
+		Self { url, client, the_type: the_type.to_owned() }
 	}
 
 	pub async fn get_origin(&self, id: &str) -> Result<Option<Origin>, ApiError> {
-		let url = self.url.join("origin/")?.join(id)?;
+		let url = self.url.join("origin/")?.join(&self.the_type.to_string())?.join("/")?.join(id)?;
 		let resp = self.client.get(url).send().await?;
 		if resp.status() == reqwest::StatusCode::NOT_FOUND {
 			return Ok(None);
@@ -28,7 +30,8 @@ impl Client {
 	}
 
 	pub async fn set_origin(&self, id: &str, origin: Origin) -> Result<(), ApiError> {
-		let url = self.url.join("origin/")?.join(id)?;
+		let rest=self.the_type.clone().to_string()+"/"+id;
+		let url = self.url.join("origin/")?.join(&rest)?;
 
 		let resp = self.client.post(url).json(&origin).send().await?;
 		resp.error_for_status()?;
