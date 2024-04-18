@@ -1,4 +1,4 @@
-# Star
+# Simple topo
 
 ```mermaid
 ---
@@ -12,7 +12,7 @@ flowchart TD
 
 ```mermaid
 ---
-title: Example traffic
+title: Traffic flow
 ---
 flowchart TD
 	4443 <-..-> 4444
