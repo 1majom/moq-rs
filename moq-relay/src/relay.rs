@@ -49,7 +49,8 @@ impl Relay {
 
 		let api = config.api.map(|url| {
 			log::info!("using moq-api: url={}", url);
-			moq_api::Client::new(url, &config.api_node.as_ref().and_then(|node: &url::Url| node.port()).unwrap())
+			let port=config.api_node.as_ref().unwrap().port().unwrap();
+			moq_api::Client::new(url, &port)
 		});
 
 		let node = config.api_node.map(|node| {
