@@ -86,31 +86,37 @@ async fn set_origin(
 		Json(origin): Json<Origin>,
 ) -> Result<(), AppError> {
 	// TODO validate origin
+	log::info!("!!!!!!!!!!!!!!!!!!!!!me made this : origin.{}.{}",relayid, id);
 	if relayid != "4443" {
 		return Err(AppError::Parameter(url::ParseError::IdnaError));
 	}
 
-	// here would i have the logic
-	// right know we need that if 4442 sets an origin then it should create
-	//   one for 4443 that points to 4442 that is the default so the imp step is the add 4443 to the path
+	// this is a comment from above the let payload line
+	// Convert the input back to JSON after validating it add adding any fields (TODO)
+
+
+	// adding 3 spec "routes"
+	// 4444 -> 4441 -> 4443
+	// 4444 -> 4441
+	//       here the key should be 4444 and the origins url should have 4441 as port
+	// 4441 -> 4443
+	// 	 here the key should be 4441 and the origins url should the original port#
 	let key = origin_key(&id, "4444");
 
-	// Convert the input back to JSON after validating it add adding any fields (TODO)
-	let payload = serde_json::to_string(&origin)?;
-
-	//   one for 1 that points to 2
-	let key2 = origin_key(&id, "4445");
-
 	let mut url = Url::parse(&origin.url.to_string()).unwrap();
-	url.set_port(Some(4444)).unwrap();
-	let origin2 = Origin {
+	let port: u16 = 4441;
+	let _ = url.set_port(Some(port));
+	let origin1 = Origin {
 		url: Url::parse(&url.to_string()).unwrap(),
 	};
-	let payload2 = serde_json::to_string(&origin2)?;
+	let payload = serde_json::to_string(&origin1)?;
 
-	//   one for 1 that points to 2
+	//   4441 -> 4443
+	let key2 = origin_key(&id, "4441");
+	let payload2 = serde_json::to_string(&origin)?;
+
+	//   in 4443 to be sure
 	let key3 = origin_key(&id, "4443");
-
 	let payload3 = serde_json::to_string(&origin)?;
 
 
