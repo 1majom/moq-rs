@@ -86,8 +86,9 @@ async fn set_origin(
 		Json(origin): Json<Origin>,
 ) -> Result<(), AppError> {
 	// TODO validate origin
-	log::info!("!!!!!!!!!!!!!!!!!!!!!me made this : origin.{}.{}",relayid, id);
+
 	if relayid != "4443" {
+		log::warn!("!!!not the expected publisher relay {}",relayid);
 		return Err(AppError::Parameter(url::ParseError::IdnaError));
 	}
 
