@@ -32,7 +32,6 @@ flowchart TD
 	C <-.-> D
 	C <-.-> E
 	D <-.-> E
-
 	Client1 == 1.: Publish(track_1)   ==> A
 	Client2 == 2.: Subscribe(track_1) ==> D
 	D       == 3.: Subscribe(track_1) ==> Hub

@@ -9,11 +9,10 @@ trap cleanup EXIT
 
 export RUST_LOG=debug
 
-echo "Starting moq-api"
+# echo "Starting moq-api"
 PORT=4440 ./dev/api &
 
 echo "Starting hub"
-export ARGS=""
 HUB_PORT="$((4440 + 1))"
 export PORT=${HUB_PORT}
 export API="http://localhost:4440"

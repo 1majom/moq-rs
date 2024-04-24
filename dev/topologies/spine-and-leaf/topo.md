@@ -32,7 +32,6 @@ flowchart BT
 	leaf2 -.-> spine2
 	leaf3 -.-> spine1
 	leaf3 -.-> spine2
-
 	Client1 == 1.: Publish(track_1)   ==> leaf1
 	Client2 == 2.: Subscribe(track_1) ==> leaf3
 	leaf3   == 3.: Subscribe(track_1) ==> spine2
