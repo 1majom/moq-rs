@@ -24,21 +24,21 @@ services:
     entrypoint: moq-api
     command: --listen [::]:4440 --redis redis://redis:6379
 
-  relay1:
+  relay4441:
     <<: *x-relay
     command: --listen [::]:4441 --tls-cert /etc/tls/cert --tls-key /etc/tls/key --api http://api:4440 --api-node https://localhost:4441 --dev
     ports:
     - "4441:4441"
     - "4441:4441/udp"
 
-  relay2:
+  relay4443:
     <<: *x-relay
     command: --listen [::]:4443 --tls-cert /etc/tls/cert --tls-key /etc/tls/key --api http://api:4440 --api-node https://localhost:4443 --dev
     ports:
     - "4443:4443"
     - "4443:4443/udp"
 
-  relay3:
+  relay4444:
     <<: *x-relay
     command: --listen [::]:4444 --tls-cert /etc/tls/cert --tls-key /etc/tls/key --api http://api:4440 --api-node https://localhost:4444 --dev
     ports:
