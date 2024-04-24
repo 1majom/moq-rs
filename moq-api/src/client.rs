@@ -19,7 +19,10 @@ impl Client {
 	}
 
 	pub async fn get_origin(&self, id: &str) -> Result<Option<Origin>, ApiError> {
-		let url = self.url.join("origin/")?.join(&self.the_type.to_string())?.join("/")?.join(id)?;
+		// let url = self.url.join("origin/")?.join(&self.the_type.to_string())?.join("/")?.join(id)?;
+		let url = format!("{}origin/{}/{}", self.url, self.the_type.to_string(), id);
+		log::info!("!!!url: {:?}", id);
+		log::info!("!!!url: {:?}", url);
 		let resp = self.client.get(url).send().await?;
 		if resp.status() == reqwest::StatusCode::NOT_FOUND {
 			return Ok(None);
