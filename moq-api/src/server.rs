@@ -81,92 +81,69 @@ async fn get_origin(
 }
 
 async fn set_origin(
-	State(mut redis): State<ConnectionManager>,
+    State(mut redis): State<ConnectionManager>,
     Path((relayid, id)): Path<(String, String)>,
-		Json(origin): Json<Origin>,
+    Json(origin): Json<Origin>,
 ) -> Result<(), AppError> {
-	// TODO validate origin
+    // TODO validate origin
 
-	if relayid != "4443" {
-		log::warn!("!!!not the expected publisher relay {}",relayid);
-		return Err(AppError::Parameter(url::ParseError::IdnaError));
+    if relayid != "4443" {
+        log::warn!("!!!not the expected publisher relay {}", relayid);
+        return Err(AppError::Parameter(url::ParseError::IdnaError));
+    }
+	//adding routes
+	//4443 -> 4441 -> 4444
+	//4444 -> 4441 -> 4443
+
+	let preinfo =[
+		(4443,4441),
+		// (4441,4444)
+	];
+
+	//for docker reasons right now we have to provide the hostname also
+	let mut relay_info: Vec<(String, String, u16)> = Vec::new();
+	for &(src, dest) in &preinfo {
+		relay_info.push((src.to_string(), format!("relay{}", dest), dest));
+		relay_info.push((dest.to_string(), format!("relay{}", src), src));
 	}
 
-	// this is a comment from above the let payload line
-	// Convert the input back to JSON after validating it add adding any fields (TODO)
+	for (src_key_id, dst_host, dst_port) in relay_info.into_iter() {
+        let key = origin_key(&id, &src_key_id);
+        let mut url = Url::parse(&origin.url.to_string()).unwrap();
+        let _ = url.set_port(Some(dst_port));
+        let _ = url.set_host(Some(dst_host.as_str()));
+        let new_origin = Origin {
+            url: Url::parse(&url.to_string()).unwrap(),
+        };
+        let payload = serde_json::to_string(&new_origin)?;
 
+        // Attempt to get the current value for the key
+        let current: Option<String> = redis::cmd("GET").arg(&key).query_async(&mut redis).await?;
 
-	// adding 3 spec "routes"
-	// 4444 -> 4441 -> 4443
-	// 4444 -> 4441
-	//       here the key should be 4444 and the origins url should have 4441 as port
-	// 4441 -> 4443
-	// 	 here the key should be 4441 and the origins url should the original port#
-	let key = origin_key(&id, "4444");
+        if let Some(current) = &current {
+            if current.eq(&payload) {
+                // The value is the same, so we're done.
+                continue;
+            } else {
+                return Err(AppError::Duplicate);
+            }
+        }
 
-	let mut url = Url::parse(&origin.url.to_string()).unwrap();
-	let port: u16 = 4441;
-	let _ = url.set_port(Some(port));
-	let origin1 = Origin {
-		url: Url::parse(&url.to_string()).unwrap(),
-	};
-	let payload = serde_json::to_string(&origin1)?;
+        let res: Option<String> = redis::cmd("SET")
+            .arg(key)
+            .arg(payload)
+            .arg("NX")
+            .arg("EX")
+            .arg(600) // Set the key to expire in 10 minutes; the origin needs to keep refreshing it.
+            .query_async(&mut redis)
+            .await?;
 
-	//   4441 -> 4443
-	let key2 = origin_key(&id, "4441");
-	let payload2 = serde_json::to_string(&origin)?;
+        if res.is_none() {
+            return Err(AppError::Duplicate);
+        }
+    }
 
-	//   in 4443 to be sure
-	let key3 = origin_key(&id, "4443");
-	let payload3 = serde_json::to_string(&origin)?;
-
-
-
-	// Attempt to get the current value for the key
-	let current: Option<String> = redis::cmd("GET").arg(&key).query_async(&mut redis).await?;
-
-	if let Some(current) = &current {
-		if current.eq(&payload) {
-			// The value is the same, so we're done.
-			return Ok(());
-		} else {
-			return Err(AppError::Duplicate);
-		}
-	}
-
-	let res: Option<String> = redis::cmd("SET")
-	.arg(key)
-	.arg(payload)
-	.arg("NX")
-	.arg("EX")
-	.arg(600) // Set the key to expire in 10 minutes; the origin needs to keep refreshing it.
-	.query_async(&mut redis)
-	.await?;
-
-
-	let res2: Option<String> = redis::cmd("SET")
-	.arg(key2)
-	.arg(payload2)
-	.arg("NX")
-	.arg("EX")
-	.arg(600) // Set the key to expire in 10 minutes; the origin needs to keep refreshing it.
-	.query_async(&mut redis)
-	.await?;
-
-	let res3: Option<String> = redis::cmd("SET")
-	.arg(key3)
-	.arg(payload3)
-	.arg("NX")
-	.arg("EX")
-	.arg(600) // Set the key to expire in 10 minutes; the origin needs to keep refreshing it.
-	.query_async(&mut redis)
-	.await?;
-
-	if res.is_none() || res2.is_none()|| res3.is_none() {
-		return Err(AppError::Duplicate);
-	}
-
-	Ok(())
+    Ok(())
 }
 
 async fn delete_origin(Path(id): Path<String>, State(mut redis): State<ConnectionManager>) -> Result<(), AppError> {
