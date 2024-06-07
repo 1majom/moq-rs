@@ -86,26 +86,42 @@ async fn set_origin(
     Json(origin): Json<Origin>,
 ) -> Result<(), AppError> {
     // TODO validate origin
+	let mut preinfo = Vec::new();
 
-    if relayid != "4443" {
-        log::warn!("!!!not the expected publisher relay {}", relayid);
-        return Err(AppError::Parameter(url::ParseError::IdnaError));
-    }
-	//adding routes
-	//4443 -> 4441 -> 4444
-	//4444 -> 4441 -> 4443
+	if relayid == "4443" {
+        //4444 -> 4441 -> 4443
 
-	let preinfo =[
-		(4443,4441),
-		// (4441,4444)
-	];
+		preinfo = vec![
+			(4444,4441),
+			(4441,4443)
+		];
+    }else {
+		if relayid == "4444" {
+				//adding routes
+				//4443 -> 4441 -> 4444
+				preinfo = vec![
+					(4443,4441),
+					(4441,4444)
+				];
+
+		}else {
+			log::warn!("!!!not the expected publisher relay {}", relayid);
+			return Err(AppError::Parameter(url::ParseError::IdnaError));
+		}
+	}
+
+
+
+
+
 
 	//for docker reasons right now we have to provide the hostname also
 	let mut relay_info: Vec<(String, String, u16)> = Vec::new();
 	for &(src, dest) in &preinfo {
 		relay_info.push((src.to_string(), format!("relay{}", dest), dest));
-		relay_info.push((dest.to_string(), format!("relay{}", src), src));
 	}
+
+
 
 	for (src_key_id, dst_host, dst_port) in relay_info.into_iter() {
         let key = origin_key(&id, &src_key_id);
