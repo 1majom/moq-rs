@@ -1,6 +1,18 @@
 
-### w/ moq-js: 53645b17ff4de404cacee805607dcabd2021a608
+### About this branch
 
+**works w/ moq-js: 53645b17ff4de404cacee805607dcabd2021a608**
+
+At this point the moq-api is changed in a way that it gets an exact topology when started and it will try to route 
+all moq connections through those. The moq-relay didn't need any major changes to achieve this. Sadly the changing of
+the topology while the moq componenets are already running is not implemented. That would need some tinkering with the
+local Docker daemon where the containers are running or it could be a k8s operator.
+
+For easier deployment the Makefile has been changed so it calls a Bash script which can generates the compose file and copies the correct topology descripting yaml file. A few really simple topologies are available like a line, a star, and a kind of spine and leaf...
+
+The original contents of the README.md can be found bellow the line.
+
+***
 
 
 <p align="center">
