@@ -10,16 +10,33 @@ from mininet.node import Node
 #!/usr/bin/env python
 
 """
-Extra steps:
-  - need to modify the cert gen as always!
-  - in the script we count on a veth2 interface being available, it will get the 10.0.0.99 address
-  - cmds for 3 host scenario
-  h1 ./target/debug/moq-relay --bind '10.0.0.1:4443' --tls-cert dev/localhost.crt --tls-key dev/localhost.key --dev &
-  h2 ffmpeg -hide_banner -v quiet -stream_loop -1 -re -i ./dev/bbb.mp4 -c copy -an -f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame  | ./target/debug/moq-pub --name bbb "https://10.0.0.99:4443" &
-  h3 ./target/debug/moq-sub --name bbb https://10.0.0.99:4443/bbb | ffplay -
-  sudo ip link add veth2 type veth
-  sudo ip link set veth2 up
-  sudo ip link set veth2 address 00:00:00:00:00:99
+- cmds for 1 relay scenario, h4 is left out :c
+  +----------+   +------------+   +-----------+
+  | h1 (pub) +---+ h2 (relay) +---+ h3 (sub)  |
+  +----------+   +------------+   +-----------+
+
+    - h2 ./target/debug/moq-relay --bind '10.0.1.1:4443' --tls-cert dev/localhost.crt --tls-key dev/localhost.key --tls-disable-verify --dev &
+    - h1 ffmpeg -hide_banner         -stream_loop -1 -re     -i ./dev/bbb.mp4        -c copy -an     -f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame - | ./target/debug/moq-pub --name bbb2 https://10.0.1.1:4443 --tls-disable-verify &
+    - h3 ./target/debug/moq-sub --name bbb2 https://10.0.1.1:4443 --tls-disable-verify | ffplay -
+
+
+- cmds for 2 relay scenario, !: the /dev/api script is not in the repo, it is changed to fit the current implementation
+  +----------+   +------------+   +-----------+   +----------+
+  | h1 (pub) +---+ h2 (relay) +---+ h3 (relay)+---+ h4 (sub) |
+  +----------+   +------------+   +-----------+   +----------+
+                         |                |
+                   +-----+ s1 +--------+--+
+                   |                   |
+                 +----+              +-------------------------------------------+
+                 |h5  |              |root(host system running redis for the api)|
+                 +----+              +-------------------------------------------+
+
+
+    - h5 ./dev/api &
+    - h2 RUST_LOG=debug RUST_BACKTRACE=1 ./target/debug/moq-relay --bind '10.0.1.1:4443' --api http://10.0.3.1 --tls-cert dev/localhost.crt --tls-key dev/localhost.key --tls-disable-verify --dev &
+    - h3 RUST_LOG=debug RUST_BACKTRACE=1 ./target/debug/moq-relay --bind '10.0.1.2:4443' --api http://10.0.3.1 --tls-cert dev/localhost.crt --tls-key dev/localhost.key --tls-disable-verify --dev &
+	- h1 ffmpeg -hide_banner         -stream_loop -1 -re     -i ./dev/bbb.mp4        -c copy -an     -f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame - |  RUST_LOG=debug RUST_BACKTRACE=1 ./target/debug/moq-pub --name bbb2 https://10.0.1.1:4443 --tls-disable-verify &
+    - h4 RUST_LOG=debug RUST_BACKTRACE=1 ./target/debug/moq-sub --name bbb2 https://10.0.1.2:4443 --tls-disable-verify | ffplay -
 """
 
 import re
@@ -47,27 +64,35 @@ if __name__ == '__main__':
     h2=net.addHost('h2')
     h3=net.addHost('h3', ip='10.0.1.2/24')
     h4=net.addHost('h4', ip='10.0.2.2/24')
+    h5=net.addHost('h5', ip='10.0.3.1/24')
 
     a=net.addLink(h1,h2)
     b=net.addLink(h2,h3)
     c=net.addLink(h3,h4)
+    d=net.addLink(h2,switch)
+    e=net.addLink(h5,switch)
+    f=net.addLink(h3,switch)
 
-    # h1 h1-eth0:h2-eth0
-    # h2 h2-eth0:h1-eth0 h2-eth1:h3-eth0
-    # h3 h3-eth0:h2-eth1 h3-eth1:h4-eth0
-    # h4 h4-eth0:h3-eth1
-    #
+    # we need the access to the host because of the redis container, in the long run it might be easier to put
+    # the storing into the binary. But the route destinated to the root interface is not needed, because only
+    # the two relays will need access to the redis container and they are connected to the switch.
+    root = Node( 'root', inNamespace=False )
+    intf = net.addLink( root, switch ).intf1
+    root.setIP( '10.0.3.99', intf=intf )
+
+
 
 
 
 
     net.start()
-    # Add routes from root ns to hosts
-    # root.cmd( 'route add -net ' + '10.0.0.0/24' + ' dev ' + str( intf ) )
     h2.cmd('ip addr add 10.0.1.1/24 dev h2-eth1')
     h3.cmd('ip addr del 10.0.0.3/24 dev h3-eth0')
     h3.cmd('ip addr add 10.0.1.2/24 dev h3-eth0')
     h3.cmd('ip addr add 10.0.2.1/24 dev h3-eth1')
+
+    h2.cmd('ip addr add 10.0.3.2/24 dev h2-eth2')
+    h3.cmd('ip addr add 10.0.3.3/24 dev h3-eth2')
 
     h1.cmd('ip route add 10.0.1.0/24 via 10.0.0.2')
     h1.cmd('ip route add 10.0.2.0/24 via 10.0.0.2')

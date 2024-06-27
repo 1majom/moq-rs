@@ -10,16 +10,35 @@ from mininet.node import Node
 #!/usr/bin/env python
 
 """
+  +----+   +----+   +----+
+  | h1 +---+ s1 +---+ h2 |
+  +----+   +----+   +----+
+            |
+          +----+
+          | h3 |
+          +----+
+            |
+          +----+
+          |root|
+          +----+    mininet
+------------|-------------------
+            |       host system
+          veth2 (10.0.0.99)
+
+
+
 Extra steps:
   - need to modify the cert gen as always!
   - in the script we count on a veth2 interface being available, it will get the 10.0.0.99 address
-  - cmds for 3 host scenario
-  h1 ./target/debug/moq-relay --bind '10.0.0.1:4443' --tls-cert dev/localhost.crt --tls-key dev/localhost.key --dev &
-  h2 ffmpeg -hide_banner -v quiet -stream_loop -1 -re -i ./dev/bbb.mp4 -c copy -an -f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame  | ./target/debug/moq-pub --name bbb "https://10.0.0.99:4443" &
-  h3 ./target/debug/moq-sub --name bbb https://10.0.0.99:4443/bbb | ffplay -
   sudo ip link add veth2 type veth
-  sudo ip link set veth2 up
   sudo ip link set veth2 address 00:00:00:00:00:99
+  sudo ip link set veth2 up
+
+  - cmds for 3 host scenario
+  h1 ./target/debug/moq-relay --bind '10.0.0.1:4443' --tls-cert dev/localhost.crt --tls-key dev/localhost.key --tls-disable-verify --dev &
+  h2 ffmpeg -hide_banner         -stream_loop -1 -re     -i ./dev/bbb.mp4        -c copy -an     -f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame - | ./target/debug/moq-pub --name bbb2 https://10.0.0.1:4443 --tls-disable-verify &
+  h3 ./target/debug/moq-sub --name bbb2 https://10.0.0.1:4443 --tls-disable-verify | ffplay -
+
 """
 
 import re
