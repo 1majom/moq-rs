@@ -27,15 +27,15 @@ from mininet.node import Node
                          |                |
                    +-----+ s1 +--------+--+
                    |                   |
-                 +----+              +-------------------------------------------+
-                 |h5  |              |root(host system running redis for the api)|
-                 +----+              +-------------------------------------------+
+                 +---------+              +-------------------------------------------+
+                 |h5 (api) |              |root(host system running redis for the api)|
+                 +---------+              +-------------------------------------------+
 
 
     - h5 ./dev/api &
-    - h2 RUST_LOG=debug RUST_BACKTRACE=1 ./target/debug/moq-relay --bind '10.0.1.1:4443' --api http://10.0.3.1 --tls-cert dev/localhost.crt --tls-key dev/localhost.key --tls-disable-verify --dev &
-    - h3 RUST_LOG=debug RUST_BACKTRACE=1 ./target/debug/moq-relay --bind '10.0.1.2:4443' --api http://10.0.3.1 --tls-cert dev/localhost.crt --tls-key dev/localhost.key --tls-disable-verify --dev &
-	- h1 ffmpeg -hide_banner         -stream_loop -1 -re     -i ./dev/bbb.mp4        -c copy -an     -f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame - |  RUST_LOG=debug RUST_BACKTRACE=1 ./target/debug/moq-pub --name bbb2 https://10.0.1.1:4443 --tls-disable-verify &
+    - h2 'RUST_LOG=debug RUST_BACKTRACE=1 ./target/debug/moq-relay --bind \'10.0.1.1:4443\' --api http://10.0.3.1 --node \'https://10.0.1.1:4443\'--tls-cert dev/localhost.crt --tls-key dev/localhost.key --tls-disable-verify --dev &'
+    - h3 'RUST_LOG=debug RUST_BACKTRACE=1 ./target/debug/moq-relay --bind \'10.0.1.2:4443\' --api http://10.0.3.1 --node \'https://10.0.1.2:4443\'--tls-cert dev/localhost.crt --tls-key dev/localhost.key --tls-disable-verify --dev &'
+    - h1 ffmpeg -hide_banner -stream_loop -1 -re -i ./dev/bbb.mp4 -c copy -an -f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame - |  RUST_LOG=debug RUST_BACKTRACE=1 ./target/debug/moq-pub --name bbb2 https://10.0.1.1:4443 --tls-disable-verify &
     - h4 RUST_LOG=debug RUST_BACKTRACE=1 ./target/debug/moq-sub --name bbb2 https://10.0.1.2:4443 --tls-disable-verify | ffplay -
 """
 
@@ -87,24 +87,26 @@ if __name__ == '__main__':
 
     net.start()
     h2.cmd('ip addr add 10.0.1.1/24 dev h2-eth1')
-    h3.cmd('ip addr del 10.0.0.3/24 dev h3-eth0')
     h3.cmd('ip addr add 10.0.1.2/24 dev h3-eth0')
     h3.cmd('ip addr add 10.0.2.1/24 dev h3-eth1')
-
     h2.cmd('ip addr add 10.0.3.2/24 dev h2-eth2')
     h3.cmd('ip addr add 10.0.3.3/24 dev h3-eth2')
 
     h1.cmd('ip route add 10.0.1.0/24 via 10.0.0.2')
     h1.cmd('ip route add 10.0.2.0/24 via 10.0.0.2')
-
     h2.cmd('ip route add 10.0.2.0/24 via 10.0.1.2')
-
     h3.cmd('ip route add 10.0.0.0/24 via 10.0.1.1')
     h4.cmd('ip route add 10.0.0.0/24 via 10.0.2.1')
     h4.cmd('ip route add 10.0.1.0/24 via 10.0.2.1')
 
     print( "Dumping host connections" )
     dumpNodeConnections(net.hosts)
+
+    h5.cmd('./dev/api &')
+    h2.cmd('RUST_LOG=debug RUST_BACKTRACE=1 ./target/debug/moq-relay --bind \'10.0.1.1:4443\' --api http://10.0.3.1 --node \'https://10.0.1.1:4443\' --tls-cert ./dev/localhost.crt --tls-key ./dev/localhost.key --tls-disable-verify --dev &')
+    h3.cmd('RUST_LOG=debug RUST_BACKTRACE=1 ./target/debug/moq-relay --bind \'10.0.1.2:4443\' --api http://10.0.3.1 --node \'https://10.0.1.2:4443\' --tls-cert ./dev/localhost.crt --tls-key ./dev/localhost.key --tls-disable-verify --dev &')
+
+
     CLI( net )
 
 
