@@ -102,7 +102,7 @@ if __name__ == '__main__':
     print( "Dumping host connections" )
     dumpNodeConnections(net.hosts)
 
-    h5.cmd('./dev/api &')
+    h5.cmd('REDIS=10.0.3.99  ./dev/api &')
     h2.cmd('RUST_LOG=debug RUST_BACKTRACE=1 ./target/debug/moq-relay --bind \'10.0.1.1:4443\' --api http://10.0.3.1 --node \'https://10.0.1.1:4443\' --tls-cert ./dev/localhost.crt --tls-key ./dev/localhost.key --tls-disable-verify --dev &')
     h3.cmd('RUST_LOG=debug RUST_BACKTRACE=1 ./target/debug/moq-relay --bind \'10.0.1.2:4443\' --api http://10.0.3.1 --node \'https://10.0.1.2:4443\' --tls-cert ./dev/localhost.crt --tls-key ./dev/localhost.key --tls-disable-verify --dev &')
 

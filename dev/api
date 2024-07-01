@@ -12,6 +12,9 @@ HOST="${HOST:-[::]}"
 PORT="${PORT:-4442}"
 LISTEN="${LISTEN:-$HOST:$PORT}"
 
+REDIS="${REDIS:-[::]}"
+
+
 # Check for Podman/Docker and set runtime accordingly
 if command -v podman &> /dev/null; then
     RUNTIME=podman
@@ -33,14 +36,12 @@ cleanup() {
 cleanup
 
 # Run a Redis instance
-REDIS_CONTAINER=$($RUNTIME run --rm --name moq-redis -d -p "$REDIS_PORT:6379" redis:latest)
+REDIS_CONTAINER=$(docker run --rm --name moq-redis -d -p "$REDIS_PORT:6379" redis:latest)
 
 # Cleanup function to stop Redis when script exits
 trap cleanup EXIT
 
-# Default to a sqlite database in memory
-DATABASE="${DATABASE-sqlite::memory:}"
 
 # Run the relay and forward any arguments
 # cargo run --bin moq-api -- --listen "$LISTEN" --redis "redis://localhost:$REDIS_PORT" "$@"
-./target/debug/moq-api --redis "redis://10.0.3.99:$REDIS_PORT" "$@"
+./target/debug/moq-api --redis "redis://$REDIS:$REDIS_PORT" "$@"
