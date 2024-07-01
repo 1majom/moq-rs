@@ -3,3 +3,6 @@ target/
 logs/
 *.mp4
 __pycache__/*
+*.pcap
+*.pcapng
+
