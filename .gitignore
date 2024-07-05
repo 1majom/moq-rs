@@ -5,4 +5,5 @@ logs/
 __pycache__/*
 *.pcap
 *.pcapng
-
+pcaps/*
+ssl/*
