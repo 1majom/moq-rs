@@ -122,32 +122,31 @@ async fn set_origin(
 ) -> Result<(), AppError> {
 
 	let topo: Topology = serde_yaml::from_str(&state.topo).map_err(|_| AppError::Parameter(url::ParseError::IdnaError))?;
-	if !topo.nodes.contains(&relayid) {
+	if !topo.nodes.contains(&relayid.replace("relay", "")) {
 		log::warn!("!!!not the expected publisher relay {}", relayid);
 		return Err(AppError::Parameter(url::ParseError::IdnaError));
 	}
 
-	let mut preinfo: Vec<(u16, u16)> = Vec::new();
+	let mut preinfo: Vec<(String, String)> = Vec::new();
     let mut queue: VecDeque<String> = VecDeque::new();
     let mut visited: HashSet<String> = HashSet::new();
 
-    queue.push_back(relayid.clone());
-    visited.insert(relayid.clone());
+    queue.push_back(relayid.replace("relay","").clone());
+    visited.insert(relayid.replace("relay","").clone());
+
+	log::info!("relay_info: {:?}", queue);
+	log::info!("relay_info: {:?}", topo.edges);
 
 
 	// Getting the edges that will be used for that exact relayid
     while let Some(node) = queue.pop_front() {
         for (from, to) in &topo.edges {
             if from == &node && !visited.contains(to) {
-                let from_u32 = from.parse().unwrap();
-                let to_u32 = to.parse().unwrap();
-                preinfo.push((to_u32, from_u32));
+                preinfo.push((to.to_string(), from.to_string()));
                 queue.push_back(to.clone());
                 visited.insert(to.clone());
             } else if to == &node && !visited.contains(from) {
-                let from_u32 = from.parse().unwrap();
-                let to_u32 = to.parse().unwrap();
-                preinfo.push((from_u32, to_u32));
+                preinfo.push((from.to_string(), to.to_string()));
                 queue.push_back(from.clone());
                 visited.insert(from.clone());
             }
@@ -156,8 +155,8 @@ async fn set_origin(
 
 	//for docker reasons right now we have to provide the hostname also
 	let mut relay_info: Vec<(String, String, u16)> = Vec::new();
-	for &(src, dest) in &preinfo {
-		relay_info.push((src.to_string(), format!("relay{}", dest), dest));
+	for (src, dest) in preinfo {
+		relay_info.push((src.to_string(), "relay".to_owned()+&dest.clone(), dest.clone().replace("relay", "").parse().unwrap()));
 	}
 
 
@@ -165,11 +164,10 @@ async fn set_origin(
 	for (src_key_id, dst_host, dst_port) in relay_info.into_iter() {
         let key = origin_key(&namespace, &src_key_id);
         let mut url = Url::parse(&origin.url.to_string()).unwrap();
-		println!("url: {:?}", url);
-        let _ = url.set_port(Some(dst_port));
-        let _ = url.set_host(Some(dst_host.as_str()));
 
-		println!("url: {:?}", url);
+		let _ = url.set_port(Some(dst_port));
+		let _ = url.set_host(Some(&dst_host));
+
 
         let new_origin = Origin {
             url: Url::parse(&url.to_string()).unwrap(),

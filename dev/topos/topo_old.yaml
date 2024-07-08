@@ -1,7 +1,7 @@
 nodes:
-  - localhost4441
-  - localhost4442
+  - relay1
+  - relay2
 
 edges:
-  - - localhost4441
-    - localhost4442
+  - - relay1
+    - relay2

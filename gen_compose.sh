@@ -3,19 +3,19 @@
 topology_file=$1
 
 if [ -z "$topology_file" ]; then
-	read -p "Please enter topo: " middle_part
-	allowed_topologies="spineleaf line star"
+    read -p "Please enter topo: " middle_part
+    allowed_topologies="spineleaf line star"
 
-	if [[ " $allowed_topologies " =~ " $middle_part " ]]; then
-		topology_file="dev/topos/topo_${middle_part}.yaml"
-	else
-		echo "Invalid topology: $middle_part. Allowed values are $allowed_topologies."
-		exit 1
-	fi
+    if [[ " $allowed_topologies " =~ " $middle_part " ]]; then
+        topology_file="dev/topos/topo_${middle_part}.yaml"
+    else
+        echo "Invalid topology: $middle_part. Allowed values are $allowed_topologies."
+        exit 1
+    fi
 fi
 
 if [ "$topology_file" == "old" ]; then
-	cp dev/topos/topo_old.yaml topo.yaml
+    cp dev/topos/topo_old.yaml topo.yaml
     cp docker-compose-old.yml docker-compose.yml
     echo "Using old docker-compose configuration."
     exit 0
@@ -30,15 +30,14 @@ cp $topology_file topo.yaml
 cat << EOF > docker-compose.yml
 version: "3.8"
 
-x-relay: &x-relay
+x-moq: &x-moq
   build: .
-  entrypoint: ["moq-relay"]
   environment:
-    RUST_LOG: \${RUST_LOG:-debug}
+    RUST_LOG: ${RUST_LOG:-debug}
   volumes:
-  - ./dev/localhost.crt:/etc/tls/cert:ro
-  - ./dev/localhost.key:/etc/tls/key:ro
-  - certs:/etc/ssl/certs
+    - ./dev/localhost.crt:/etc/tls/cert:ro
+    - ./dev/localhost.key:/etc/tls/key:ro
+    - certs:/etc/ssl/certs
   depends_on:
     install-certs:
       condition: service_completed_successfully
@@ -50,21 +49,34 @@ services:
     - "6400:6379"
 
   api:
-    build: .
+    <<: *x-moq
+    entrypoint: moq-api
     volumes:
       - ./topo.yaml:/topo.yaml:ro
-    entrypoint: moq-api
-    command: --listen [::]:4440 --redis redis://redis:6379 --topo-path topo.yaml
+    command: --redis redis://redis:6379 --topo-path topo.yaml
+    ports:
+      - "80"
+  dir:
+    <<: *x-moq
+    entrypoint: moq-dir
+    command: --tls-cert /etc/tls/cert --tls-key /etc/tls/key
+    ports:
+      - "443/udp"
 EOF
 
 for relay in "${relays[@]}"; do
 cat << EOF >> docker-compose.yml
   relay${relay}:
-    <<: *x-relay
-    command: --listen [::]:${relay} --tls-cert /etc/tls/cert --tls-key /etc/tls/key --api http://api:4440 --api-node https://localhost:${relay} --dev
+    <<: *x-moq
+    entrypoint: moq-relay
+    command: --tls-cert /etc/tls/cert --tls-key /etc/tls/key --tls-disable-verify --api http://api --node https://relay${relay} --dev --announce https://dir
+    depends_on:
+      - api
+      - dir
     ports:
-    - "${relay}:${relay}"
-    - "${relay}:${relay}/udp"
+    - "${relay}:443"
+    - "${relay}:443/udp"
+
 EOF
 done
 
