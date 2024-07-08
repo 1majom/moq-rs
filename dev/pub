@@ -4,6 +4,20 @@ set -euo pipefail
 # Change directory to the root of the project
 cd "$(dirname "$0")/.."
 
+# Download the Big Buck Bunny video if it doesn't exist
+if [ ! -f dev/bbb.mp4 ]; then
+	echo "Downloading ya boye Big Buck Bunny..."
+	wget http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4 -O dev/tmp.mp4
+
+	echo "Converting to a (properly) fragmented MP4..."
+	ffmpeg -i dev/tmp.mp4 \
+		-c copy \
+		-f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame \
+		dev/bbb.mp4
+
+	rm dev/tmp.mp4
+fi
+
 # Use debug logging by default
 export RUST_LOG="${RUST_LOG:-debug}"
 
@@ -13,29 +27,22 @@ PORT="${PORT:-4443}"
 ADDR="${ADDR:-$HOST:$PORT}"
 SCHEME="${SCHEME:-https}"
 
-# Generate a random 16 character name by default.
-#NAME="${NAME:-$(head /dev/urandom | LC_ALL=C tr -dc 'a-zA-Z0-9' | head -c 16)}"
-
-# JK use the name "bbb" instead, matching the Big Buck Bunny demo.
-# TODO use that random name if the host is not localhost
+# Use the name "bbb" for the broadcast.
 NAME="${NAME:-bbb}"
 
 # Combine the host into a URL.
 URL="${URL:-"$SCHEME://$ADDR"}"
 
 # Default to a source video
-INPUT="${INPUT:-dev/source.mp4}"
+INPUT="${INPUT:-dev/bbb.mp4}"
 
 # Print out the watch URL
 echo "Watch URL: https://quic.video/watch/$NAME?server=$ADDR"
 
 # Run ffmpeg and pipe the output to moq-pub
-# TODO enable audio again once fixed.
 ffmpeg -hide_banner -v quiet \
 	-stream_loop -1 -re \
 	-i "$INPUT" \
-	-c copy \
-	-an \
-	-f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer \
-	-frag_duration 1 \
+	-c copy -an \
+	-f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame \
 	- | cargo run --bin moq-pub -- --name "$NAME" "$URL" "$@"

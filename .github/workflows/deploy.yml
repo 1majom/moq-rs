@@ -1,4 +1,4 @@
-name: main
+name: deploy
 
 on:
   push:
@@ -19,7 +19,7 @@ jobs:
 
     # Only one release at a time and cancel prior releases
     concurrency:
-      group: release
+      group: deploy
       cancel-in-progress: true
 
     steps:
@@ -62,9 +62,3 @@ jobs:
         with:
           service: ${{env.SERVICE}}
           image: ${{env.REGISTRY}}/${{env.IMAGE}}
-
-      # Publish any new crate versions
-      - uses: katyo/publish-crates@v2
-        with:
-          registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-          ignore-unpublished-changes: true

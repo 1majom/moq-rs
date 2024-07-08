@@ -1,129 +1,77 @@
 # Local Development
 
-## Quickstart with Docker
+This is a collection of helpful scripts for local development.
+Check the source for each script for a list of useful arguments.
 
-Launch a basic cluster, including provisioning certs and deploying root certificates:
+## moq-relay
 
+Hosts a [relay server](../moq-relay) on `localhost:4443` using self-signed certificates.
+
+Requires:
+
+-   Rust
+-   Go (mkcert)
+
+```bash
+./dev/relay
 ```
-# From repo root:
+
+All clients listed can connect to this relay instance to publish and/or subscribe.
+You can do this via [moq-js](https://github.com/kixelated/moq-js) for a UI, either self-hosted or accessed via https://quic.video/publish/?server=localhost:4443.
+
+The purpose of a relay is to support clustering and fanout.
+Like mentioned in the root README, the easiest way to do this is via docker compose:
+
+```bash
 make run
 ```
 
-Then, visit https://quic.video/publish/?server=localhost:4443.
+This hosts a Redis instance and [moq-api](../moq-api) instance to store the list of origins.
+It also hosts a [moq-dir](../moq-dir) instance to serve the current announcements.
 
-## Manual setup
+## moq-pub
 
-This is a collection of helpful scripts for local development.
+Publish some test footage from disk to the localhost relay using [moq-pub](../moq-pub).
+This downloads Big Buck Bunny and publishes a broadcast named `bbb`.
 
-### moq-relay
+Requires:
 
-Unfortunately, QUIC mandates TLS and makes local development difficult.
-If you have a valid certificate you can use it instead of self-signing.
-
-Use [mkcert](https://github.com/FiloSottile/mkcert) to generate a self-signed certificate.
-Unfortunately, this currently requires [Go](https://golang.org/) to be installed in order to [fork](https://github.com/FiloSottile/mkcert/pull/513) the tool.
-Somebody should get that merged or make something similar in Rust...
-
-```bash
-./dev/cert
-```
-
-Unfortunately, WebTransport in Chrome currently (May 2023) doesn't verify certificates using the root CA.
-The workaround is to use the `serverFingerprints` options, which requires the certificate MUST be only valid for at most **14 days**.
-This is also why we're using a fork of mkcert, because it generates certificates valid for years by default.
-This limitation will be removed once Chrome uses the system CA for WebTransport.
-
-### moq-pub
-
-You'll want some test footage to broadcast.
-Anything works, but make sure the codec is supported by the player since `moq-pub` does not re-encode.
-
-Here's a criticially acclaimed short film:
-
-```bash
-mkdir media
-wget http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4 -O dev/source.mp4
-```
-
-`moq-pub` uses [ffmpeg](https://ffmpeg.org/) to convert the media to fMP4.
-You should have it installed already if you're a video nerd, otherwise:
-
-```bash
-brew install ffmpeg
-```
-
-### moq-api
-
-`moq-api` uses a redis instance to store active origins for clustering.
-This is not relevant for most local development and the code path is skipped by default.
-
-However, if you want to test the clustering, you'll need either either [Docker](https://www.docker.com/) or [Podman](https://podman.io/) installed.
-We run the redis instance via a container automatically as part of `dev/api`.
-
-## Development
-
-**tl;dr** run these commands in seperate terminals:
-
-```bash
-./dev/cert
-./dev/relay
-./dev/pub
-```
-
-They will each print out a URL you can use to publish/watch broadcasts.
-
-### moq-relay
-
-You can run the relay with the following command, automatically using the self-signed certificates generated earlier.
-This listens for WebTransport connections on WebTransport `https://localhost:4443` by default.
-
-```bash
-./dev/relay
-```
-
-It will print out a URL when you can use to publish. Alternatively, you can use `dev/pub` instead.
-
-> Publish URL: https://quic.video/publish/?server=localhost:4443
-
-### moq-pub
-
-The following command runs a development instance, broadcasing `dev/source.mp4` to WebTransport `https://localhost:4443`:
+-   Rust
+-   ffmpeg
 
 ```bash
 ./dev/pub
 ```
 
-It will print out a URL when you can use to watch.
-By default, the broadcast name is `dev` but you can overwrite it with the `NAME` env.
+Alternatively, you can use Gstreamer via [moq-gst](https://github.com/kixelated/moq-gst).
+The [run](https://github.com/kixelated/moq-gst/blob/main/run) script does the exact same thing.
 
-> Watch URL: https://quic.video/watch/dev?server=localhost:4443
+## moq-sub
 
-If you're debugging encoding issues, you can use this script to dump the file to disk instead, defaulting to
-`dev/output.mp4`.
+You can use `moq-sub` to subscribe to media streams from a MoQ relay and pipe them to the standard output.
+By piping the command to a video player, e.g. `ffplay` or `mpv`, you can play a MoQ broadcast natively.
 
-```bash
-./dev/pub-file
-```
+Currently, `moq-sub` simply dumps all received segments of the first video and the first audio track 
+directly to `stdout`.
 
-### moq-api
-
-The following commands runs an API server, listening for HTTP requests on `http://localhost:4442` by default.
-
-```bash
-./dev/api
-```
-
-Nodes can now register themselves via the API, which means you can run multiple interconnected relays.
-There's two separate `dev/relay-0` and `dev/relay-1` scripts to test clustering locally:
+The following command subscribes to a stream from a MoQ relay and plays it with `ffplay`.
+By default, the URL is `https://localhost:4433/dev`, so it will play the stream published with `dev/pub` 
+to the relay started with `dev/relay`. You can change the broadcast name by setting the `NAME` env var.
 
 ```bash
-./dev/relay-0
-./dev/relay-1
+./dev/sub
 ```
 
-These listen on `:4443` and `:4444` respectively, inserting themselves into the origin database as `localhost:$PORT`.
+## moq-clock
 
-There's also a separate `dev/pub-1` script to publish to the `:4444` instance.
-You can use the exisitng `dev/pub` script to publish to the `:4443` instance.
+To show that MoQ can do more than just media, we made a simple clock.
 
-If all goes well, you would be able to publish to one relay and watch from the other.
+```bash
+./dev/clock --publish
+```
+
+And run the subscriber in a separate terminal:
+
+```bash
+./dev/clock
+```

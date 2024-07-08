@@ -21,9 +21,9 @@ use serde::{Serialize,Deserialize};
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct ServerConfig {
-    /// Listen for HTTP requests on the given address
-    #[arg(long)]
-    pub listen: net::SocketAddr,
+	/// Listen for HTTP requests on the given address
+	#[arg(long, default_value = "[::]:80")]
+	pub bind: net::SocketAddr,
 
     /// Connect to the given redis instance
     #[arg(long)]
@@ -75,7 +75,7 @@ impl Server {
 
 		let app = Router::new()
 				.route(
-					"/origin/:relayid/:id",
+					"/origin/:relayid/*namespace",
 					get(get_origin)
 						.post(set_origin)
 				)
@@ -87,9 +87,9 @@ impl Server {
 				.with_state(AppState { redis, topo: self.topo });
 
 
-		log::info!("serving requests: bind={}", self.config.listen);
+		log::info!("serving requests: bind={}", self.config.bind);
 
-		axum::Server::bind(&self.config.listen)
+		axum::Server::bind(&self.config.bind)
 			.serve(app.into_make_service())
 			.await?;
 
@@ -98,10 +98,10 @@ impl Server {
 }
 
 async fn get_origin(
-	Path((relayid, id)): Path<(String, String)>,
+	Path((relayid, namespace)): Path<(String, String)>,
 	State(mut state): State<AppState>,
 ) -> Result<Json<Origin>, AppError> {
-
+	let key = origin_key(&namespace, &relayid);
 
 	let key = origin_key(&id, &relayid);
 	let payload: Option<String> = state.redis.get(&key).await?;
@@ -118,7 +118,7 @@ struct Topology {
 
 async fn set_origin(
     State(mut state): State<AppState>,
-	Path((relayid, id)): Path<(String, String)>,
+	Path((relayid, namespace)): Path<(String, String)>,
     Json(origin): Json<Origin>,
 ) -> Result<(), AppError> {
 
@@ -155,7 +155,6 @@ async fn set_origin(
         }
     }
 
-
 	//for docker reasons right now we have to provide the hostname also
 	let mut relay_info: Vec<(String, String, u16)> = Vec::new();
 	for &(src, dest) in &preinfo {
@@ -165,7 +164,7 @@ async fn set_origin(
 
 
 	for (src_key_id, dst_host, dst_port) in relay_info.into_iter() {
-        let key = origin_key(&id, &src_key_id);
+        let key = origin_key(&namespace, &src_key_id);
         let mut url = Url::parse(&origin.url.to_string()).unwrap();
 		println!("url: {:?}", url);
         let _ = url.set_port(Some(dst_port));
@@ -207,8 +206,11 @@ async fn set_origin(
     Ok(())
 }
 
-async fn delete_origin(Path(id): Path<String>, State(mut state): State<AppState>,) -> Result<(), AppError> {
-	let key = format!("*{}", id);
+async fn delete_origin(
+	Path(namespace): Path<String>,
+	State(mut state): State<AppState>,
+) -> Result<(), AppError> {
+	let key = format!("*{}", namespace);
 	match state.redis.del(key).await? {
 		0 => Err(AppError::NotFound),
 		_ => Ok(()),
@@ -217,11 +219,11 @@ async fn delete_origin(Path(id): Path<String>, State(mut state): State<AppState>
 
 // Update the expiration deadline.
 async fn patch_origin(
-	Path(id): Path<String>,
+	Path(namespace): Path<String>,
 	State(mut state): State<AppState>,
 	Json(origin): Json<Origin>,
 ) -> Result<(), AppError> {
-    let pattern = format!("*{}", id);
+    let pattern = format!("*{}", namespace);
     let keys: Vec<String> = redis::cmd("KEYS").arg(&pattern).query_async(&mut state.redis).await?;
 	// Make sure the contents haven't changed
 	// TODO make a LUA script to do this all in one operation.
@@ -240,8 +242,8 @@ async fn patch_origin(
 }
 
 
-fn origin_key(id: &str,relayid: &str) -> String {
-	format!("origin.{}.{}",relayid, id)
+fn origin_key(namespace: &str,relayid: &str) -> String {
+	format!("origin.{}.{}",relayid, namespace)
 }
 
 #[derive(thiserror::Error, Debug)]
