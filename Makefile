@@ -2,7 +2,7 @@ export CAROOT ?= $(shell cd dev ; go run filippo.io/mkcert -CAROOT)
 
 .PHONY: run
 run: dev/localhost.crt
-	@./gen_compose.sh
+	@./gen_compose.sh old
 	@docker-compose up --build --remove-orphans
 
 dev/localhost.crt:

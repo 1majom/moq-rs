@@ -14,6 +14,13 @@ if [ -z "$topology_file" ]; then
 	fi
 fi
 
+if [ "$topology_file" == "old" ]; then
+	cp dev/topos/topo_old.yaml topo.yaml
+    cp docker-compose-old.yml docker-compose.yml
+    echo "Using old docker-compose configuration."
+    exit 0
+fi
+
 
 relays=($(awk '/nodes:/,/edges:/{if (!/edges:/)print}' $topology_file | grep -v 'nodes:' | tr -d ' -'))
 

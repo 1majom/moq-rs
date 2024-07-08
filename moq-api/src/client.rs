@@ -9,11 +9,11 @@ pub struct Client {
 
 	client: reqwest::Client,
 
-	the_type: u16,
+	the_type: String,
 }
 
 impl Client {
-	pub fn new(url: Url, the_type: &u16) -> Self {
+	pub fn new(url: Url, the_type: &str) -> Self {
 		let client = reqwest::Client::new();
 		Self { url, client, the_type: the_type.to_owned() }
 	}

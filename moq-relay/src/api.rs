@@ -8,8 +8,8 @@ pub struct Api {
 
 impl Api {
 	pub fn new(url: Url, node: Url) -> Self {
-		let origin = moq_api::Origin { url: node };
-		let client = moq_api::Client::new(url);
+		let origin = moq_api::Origin { url: node.clone() };
+		let client: moq_api::Client = moq_api::Client::new(url, &(node).as_str().replace(":", "").replace("/", ""));
 
 		Self { client, origin }
 	}

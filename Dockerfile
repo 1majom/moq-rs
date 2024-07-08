@@ -1,4 +1,4 @@
-FROM rust:bookworm as builder
+FROM rust:bookworm AS builder
 
 # Create a build directory and copy over all of the files
 WORKDIR /build
@@ -14,7 +14,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo build --release && cp /build/target/release/moq-* /usr/local/cargo/bin
 
 # Create a pub image that also contains ffmpeg and a helper script
-FROM debian:bookworm-slim as moq-pub
+FROM debian:bookworm-slim AS moq-pub
 
 # Install required utilities and ffmpeg
 RUN apt-get update && \

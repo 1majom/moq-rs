@@ -103,7 +103,6 @@ async fn get_origin(
 ) -> Result<Json<Origin>, AppError> {
 	let key = origin_key(&namespace, &relayid);
 
-	let key = origin_key(&id, &relayid);
 	let payload: Option<String> = state.redis.get(&key).await?;
 	let payload = payload.ok_or(AppError::NotFound)?;
 	let origin: Origin = serde_json::from_str(&payload)?;
