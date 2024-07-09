@@ -146,15 +146,22 @@ if __name__ == '__main__':
     sleep(0.7)
 
 
-	# for troubleshooting
-    for h in [h1, h2, h3, h4]:
-        h.cmd(f"tshark -i any -w ./{h.name}.pcap &")
+    # # for troubleshooting
+    # for h in [h1, h2, h3, h4]:
+    #     h.cmd(f"tshark -i any -w ./{h.name}.pcap &")
 
-	# Sadly these two commands have to be run manually in xterm windows started by xterm h1 h4 because for some reason otherwise the stream would stop after 90ish seconds
-	# h1
-	# ffmpeg -hide_banner -stream_loop -1 -re -i ./dev/bbb.mp4 -c copy -an -f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame - |   SSLKEYLOGFILE=./ssl/h1 RUST_LOG=info RUST_BACKTRACE=1 ./target/debug/moq-pub --name bbb https://10.0.2.1:4443 --tls-disable-verify > /tmp/out-h1
+    # Sadly these two commands have to be run manually in xterm windows started by xterm h1 h4 because for some reason otherwise the stream would stop after 90ish seconds
+    h1.cmd('xterm -e bash -c "ffmpeg -hide_banner -stream_loop -1 -re -i ./dev/bbb.mp4 -c copy -an -f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame - | RUST_LOG=info ./target/debug/moq-pub --name bbb https://10.0.2.1:4443 --tls-disable-verify" &')
+    # h1
+    """
+     h1 ffmpeg -hide_banner -stream_loop -1 -re -i ./dev/bbb.mp4 -c copy -an -f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame - | RUST_LOG=warn RUST_BACKTRACE=1 ./target/debug/moq-pub --name bbb https://10.0.2.1:4443 --tls-disable-verify &
+     h4 RUST_LOG=info RUST_BACKTRACE=1 ./target/debug/moq-sub --name bbb https://10.0.2.2:4443 --tls-disable-verify | ffplay -x 200 -y 100 -
+
+
+    """
     # h4
-	# RUST_LOG=debug RUST_BACKTRACE=1 SSLKEYLOGFILE=./ssl/h4  ./target/debug/moq-sub --name bbb https://10.0.2.2:4443 --tls-disable-verify | ffplay -x 200 -y 100 -
+    sleep(0.7)
+    h4.cmd('xterm -e bash -c "RUST_LOG=info RUST_BACKTRACE=1 ./target/debug/moq-sub --name bbb https://10.0.2.2:4443 --tls-disable-verify | ffplay -x 200 -y 100 -"&')
 
 
 
