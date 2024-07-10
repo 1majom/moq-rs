@@ -69,13 +69,13 @@ cat << EOF >> docker-compose.yml
   relay${relay}:
     <<: *x-moq
     entrypoint: moq-relay
-    command: --tls-cert /etc/tls/cert --tls-key /etc/tls/key --tls-disable-verify --api http://api --node https://relay${relay} --dev --announce https://dir
+    command: --tls-cert /etc/tls/cert --tls-key /etc/tls/key --tls-disable-verify --api http://api --node https://relay${relay} --dev --announce https://dir --bind [::]:${relay}
     depends_on:
       - api
       - dir
     ports:
-    - "${relay}:443"
-    - "${relay}:443/udp"
+    - "${relay}:${relay}"
+    - "${relay}:${relay}/udp"
 
 EOF
 done
