@@ -168,7 +168,8 @@ if __name__ == '__main__':
 
     CLI( net )
 
-
+    h1.cmd('pkill -f xterm')
+    h4.cmd('pkill -f xterm')
     net.stop()
 
 
