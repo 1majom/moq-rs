@@ -1,7 +1,7 @@
 nodes:
-  number: 5
+  number: 3
 edges:
-  - node1: 2
-    node2: 4
-    delay: 50
+  - node1: 1
+    node2: 2
+    delay: 0
 

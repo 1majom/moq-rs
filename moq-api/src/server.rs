@@ -122,7 +122,7 @@ async fn set_origin(
 ) -> Result<(), AppError> {
 
 	let topo: Topology = serde_yaml::from_str(&state.topo).map_err(|_| AppError::Parameter(url::ParseError::IdnaError))?;
-	if !topo.nodes.contains(&relayid.replace("relay", "")) {
+	if !topo.nodes.contains(&relayid) {
 		log::warn!("!!!not the expected publisher relay {}", relayid);
 		return Err(AppError::Parameter(url::ParseError::IdnaError));
 	}
@@ -131,11 +131,14 @@ async fn set_origin(
     let mut queue: VecDeque<String> = VecDeque::new();
     let mut visited: HashSet<String> = HashSet::new();
 
-    queue.push_back(relayid.replace("relay","").clone());
-    visited.insert(relayid.replace("relay","").clone());
-
-	log::info!("relay_info: {:?}", queue);
-	log::info!("relay_info: {:?}", topo.edges);
+	let mut relayid = relayid.clone();
+	if let Some((ip, _)) = relayid.split_once('_') {
+        if let Some(last_octet) = ip.split('.').last() {
+            relayid= last_octet.to_string();
+        }
+    }
+    queue.push_back(relayid.clone());
+    visited.insert(relayid.clone());
 
 
 	// Getting the edges that will be used for that exact relayid
@@ -156,9 +159,8 @@ async fn set_origin(
 	//for docker reasons right now we have to provide the hostname also
 	let mut relay_info: Vec<(String, String, u16)> = Vec::new();
 	for (src, dest) in preinfo {
-		relay_info.push((src.to_string(), "relay".to_owned()+&dest.clone(), dest.clone().replace("relay", "").parse().unwrap()));
+		relay_info.push((src.to_string(), "10.3.0.".to_owned()+&dest.clone(), 4443));
 	}
-
 
 
 	for (src_key_id, dst_host, dst_port) in relay_info.into_iter() {
@@ -167,7 +169,6 @@ async fn set_origin(
 
 		let _ = url.set_port(Some(dst_port));
 		let _ = url.set_host(Some(&dst_host));
-
 
         let new_origin = Origin {
             url: Url::parse(&url.to_string()).unwrap(),
