@@ -1,36 +1,21 @@
 #!/usr/bin/python
 
-from mininet.topo import Topo
-from mininet.net import Mininet
-from mininet.util import dumpNodeConnections
-from mininet.log import setLogLevel
-from mininet.node import Node
-
-#!/usr/bin/env python
-
 """
 default sw with controller, might be a bit slower
 """
 
 import re
 import sys
-
 from sys import exit  # pylint: disable=redefined-builtin
 
-from mininet.cli import CLI
-from mininet.log import setLogLevel, info, error
 from mininet.net import Mininet
-from mininet.link import Intf
-from mininet.topolib import TreeTopo
-from mininet.util import quietRun
-from mininet.net import Mininet
-from mininet.cli import CLI
-from mininet.log import lg, info
+from mininet.util import dumpNodeConnections, quietRun, waitListening
+from mininet.log import setLogLevel, info, error, lg
 from mininet.node import Node
-from mininet.topolib import TreeTopo
-from mininet.util import waitListening
+from mininet.cli import CLI
+from mininet.link import Intf, TCLink
 from mininet.topo import SingleSwitchTopo
-from mininet.link import TCLink
+from mininet.topolib import TreeTopo
 
 def checkIntf( intf ):
     "Make sure intf exists and is not configured."

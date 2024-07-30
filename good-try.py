@@ -1,33 +1,20 @@
 #!/usr/bin/python
 
 import os
-
-from functools import partial
-from time import sleep
-from mininet.topo import Topo
-from mininet.net import Mininet
-from mininet.util import dumpNodeConnections
-from mininet.log import setLogLevel
-from mininet.node import Node
-
-from sys import exit  # pylint: disable=redefined-builtin
-
-from mininet.cli import CLI
-from mininet.log import setLogLevel, info, error
-from mininet.net import Mininet
-from mininet.util import quietRun
-from mininet.cli import CLI
-from mininet import log
-from mininet.node import Node
-from mininet.net import Mininet
-from mininet.node import OVSSwitch
-from mininet.link import TCLink
-from mininet.cli import CLI
-from mininet.log import setLogLevel
-from mininet.link import TCLink
 import subprocess
 import yaml
-import os
+from functools import partial
+from time import sleep
+from sys import exit  # pylint: disable=redefined-builtin
+
+from mininet.topo import Topo
+from mininet.net import Mininet
+from mininet.util import dumpNodeConnections, quietRun
+from mininet.log import setLogLevel, info, error
+from mininet.cli import CLI
+from mininet.node import Node, OVSSwitch
+from mininet.link import TCLink
+from mininet import log
 
 def info(msg):
     log.info(msg + '\n')
