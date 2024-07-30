@@ -5,3 +5,8 @@ logs/
 .vscode/*
 topo.yaml
 docker-compose.yml
+__pycache__/*
+*.pcap
+*.pcapng
+pcaps/*
+ssl/*
