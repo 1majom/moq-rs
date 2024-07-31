@@ -27,15 +27,15 @@ def debug(msg):
 
 
 if not os.geteuid() == 0:
-    exit("This script must be run as root")
+    exit("** This script must be run as root")
 else:
-   print("Running mininet clean")
+   print("** Running mininet clean")
 
 subprocess.call(['sudo', 'mn', '-c'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-print("Getting them needed binaries")
+print("** Getting them needed binaries")
 subprocess.run(['sudo', '-u', 'szebala', '/home/szebala/.cargo/bin/cargo', 'build'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 if not os.path.exists("topo.yaml"):
-	subprocess.run(['cp', './dev/topos/topo_line.yaml', 'topo.yaml'], check=True)
+    subprocess.run(['cp', './dev/topos/topo_line.yaml', 'topo.yaml'], check=True)
 
 if __name__ == '__main__':
 
@@ -95,7 +95,7 @@ if __name__ == '__main__':
                 net.addLink(host1, host2, cls=TCLink, delay=f'{delay}ms',
                 params1={'ip': ip1},
                 params2={'ip': ip2})
-                info(f"\n the last printed delays are put between {host1} {host2}")
+                info(f"\n** the last printed delays are put between {host1} {host2}")
             ip1 = f"10.0.{network_counter}.1"
             ip2 = f"10.0.{network_counter}.2"
             host1.cmd(f'ip route add 10.3.0.{j+1}/32 via {ip2}')
@@ -157,17 +157,21 @@ if __name__ == '__main__':
         host_counter += 1
 
 
-    # the two sleeps are needed, bc other way they would start and the exact same time, and the pub wouldnt connect
-    # to the relay, and the sub couldnt connect to the pub
+    # the two sleeps are needed at that specific line, bc other way they would start and the exact same time,
+	# and the pub wouldnt connect to the relay, and the sub couldnt connect to the pub
 
     sleep(0.7)
     net.hosts[-2].cmd(f'xterm -e bash -c "ffmpeg -hide_banner -stream_loop -1 -re -i ./dev/bbb.mp4 -c copy -an -f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame - | RUST_LOG=info ./target/debug/moq-pub --name bbb https://{first_hop_relay}:4443 --tls-disable-verify" &')
     debug(f'{net.hosts[-2]}  -  {first_hop_relay}')
     for i in range(number_of_clients-1):
         le_id=(i+3)
-        sleep(0.7)
+        sleep(0.2)
         net.hosts[-le_id].cmd(f'xterm -e bash -c "RUST_LOG=info RUST_BACKTRACE=1 ./target/debug/moq-sub --name bbb https://{last_hop_relay[i]}:4443 --tls-disable-verify | ffplay -x 200 -y 100 -"&')
         debug(f'{net.hosts[-le_id]}  -  {last_hop_relay[i]}')
+
+    for i in range(number_of_clients-1):
+        sleep(1)
+        subprocess.call(['xdotool', 'search', '--name', f'pipe{i}', 'windowmove', f'{i*300+0}', '0'])
 
     CLI( net )
     for i in range(number_of_clients):
