@@ -166,7 +166,7 @@ if __name__ == '__main__':
     for i in range(number_of_clients-1):
         le_id=(i+3)
         sleep(0.2)
-        net.hosts[-le_id].cmd(f'xterm -e bash -c "RUST_LOG=info RUST_BACKTRACE=1 ./target/debug/moq-sub --name bbb https://{last_hop_relay[i]}:4443 --tls-disable-verify | ffplay -x 200 -y 100 -"&')
+        net.hosts[-le_id].cmd(f'xterm -e bash -c "RUST_LOG=info RUST_BACKTRACE=1 ./target/debug/moq-sub --name bbb https://{last_hop_relay[i]}:4443 --tls-disable-verify | ffplay -window_title pipe{i} -x 360 -y 200 -"&')
         debug(f'{net.hosts[-le_id]}  -  {last_hop_relay[i]}')
 
     for i in range(number_of_clients-1):
