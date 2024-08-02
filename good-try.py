@@ -46,39 +46,77 @@ if __name__ == '__main__':
 
     switch = net.addSwitch('s1',failMode='standalone')
     with open("topo.yaml", 'r') as file:
-        num_hosts = yaml.safe_load(file)
-
-    with open("delays.yaml", 'r') as file:
         config = yaml.safe_load(file)
 
-    num_hosts = len(num_hosts['nodes'])
-    edges = config['edges']
-
-    # Create hosts
-    # in the topo2.yaml we get the exact number of needed hosts for the relays, so in the beginning we add 2 more hosts
-    # one for the pub and one for the sub
-    # but after that the host for the api is also created with the highest number.
-    # so if we want to use the hosts which we wanted to use as clients we should choose the -2 and -3 indexes
-    # but here we can tell the exact ips of the relays the clients will use
-    # > one of the places which you could change the script
+    relay_number = len(config['nodes'])
+    edges = config['delays']
+    # the different networks are:
+    # 10.0.x/24 - relay to relay connections there x is a counter
+    # 10.1.1/24 - api network
+    # 10.2.0/24 - api to host os connection (for docker)
+    # 10.3.0/24 - relay identifing ips, on the lo interface of relays
+    # 10.4.x/24 - pub and sub to relay connections, there x is a counter
     # the first_hop_relay is the relay which the pub will use
-    # the last_hop_relay is the relay which the sub(s) will use (with 3 subs the third will fail)
-    first_hop_relay = "10.3.0.2"
-    last_hop_relay = ["10.3.0.1","10.3.0.3","10.3.0.4","10.3.0.5","10.3.0.1"]
-    number_of_clients = len(last_hop_relay)+1
-    hosts = []
+    # the last_hop_relay is the relay which the sub(s) will use (with 3 subs the third will fail, if sleep is higher than 0.2)
+    # > one of the places which you could change the script to add the specific relays to be connected to clients
+    first_hop_relay = [("10.3.0.2", "bbb"),("10.3.0.4", "bbb-rev")]
+    last_hop_relay = [("10.3.0.1", "bbb"),  ("10.3.0.3", "bbb"),  ("10.3.0.5", "bbb-rev")]
+    number_of_clients = len(last_hop_relay)+len(first_hop_relay)
+    relays = []
+    pubs = []
+    subs= []
+    k=1
+    # Create hosts
 
-    for i in range(num_hosts+number_of_clients):
-        host = net.addHost(f'h{i+1}', ip="")
-        host.cmd('ip addr add 10.3.0.%s/32 dev lo' % str((i+1)))
+    for i in range(relay_number):
+        host = net.addHost(f'h{k}', ip="")
+        host.cmd('ip addr add 10.3.0.%s/32 dev lo' % str((k)))
+        relays.append(host)
 
-        hosts.append(host)
+        k += 1
+
+    for i in range(len(first_hop_relay)):
+        host = net.addHost(f'h{k}', ip="")
+        host.cmd('ip addr add 10.3.0.%s/32 dev lo' % str((k)))
+        pubs.append((host,first_hop_relay[i][1]))
+
+        k += 1
+
+    for i in range(len(last_hop_relay)):
+        host = net.addHost(f'h{k}', ip="")
+        host.cmd('ip addr add 10.3.0.%s/32 dev lo' % str((k)))
+        subs.append((host,last_hop_relay[i][1]))
+
+        k += 1
+
+
+
 
     # Setting up full mesh network
     network_counter = 0
     delay=None
-    for i in range(num_hosts+number_of_clients):
-        for j in range(i + 1, num_hosts+number_of_clients):
+    for i in range(relay_number):
+        # connecting pubs and subs
+        matching_pubs = [g for g, (ip, _) in enumerate(first_hop_relay) if ip.split('.')[-1] == str(i+1)]
+        for index in matching_pubs:
+            net.addLink( pubs[index][0],relays[i],
+                params1={'ip': f"10.4.{network_counter}.{2*index+1}/24"},
+                params2={'ip':  f"10.4.{network_counter}.{2*index+2}/24"})
+            pubs[index][0].cmd(f'ip route add 10.3.0.{i+1}/32 via 10.4.{network_counter}.{2*index+2}')
+            debug(f'ip route add 10.3.0.{i+1}/32 via 10.4.{network_counter}.{2*index+2}')
+            network_counter += 1
+
+        matching_subs = [g for g, (ip, _) in enumerate(last_hop_relay) if ip.split('.')[-1] == str(i+1)]
+        for index in matching_subs:
+            net.addLink( subs[index][0],relays[i],
+                params1={'ip': f"10.5.{network_counter}.{2*index+1}/24"},
+                params2={'ip':  f"10.5.{network_counter}.{2*index+2}/24"})
+            subs[index][0].cmd(f'ip route add 10.3.0.{i+1}/32 via 10.5.{network_counter}.{2*index+2}')
+            debug(f'ip route add 10.3.0.{i+1}/32 via 10.5.{network_counter}.{2*index+2}')
+            network_counter += 1
+    for i in range(relay_number):
+        # connecting relays to each other adding delays
+        for j in range(i + 1, relay_number):
             for edge in edges:
                 if i+1 == edge['node1'] and j+1 == edge['node2']:
                     delay=edge['delay']
@@ -86,8 +124,8 @@ if __name__ == '__main__':
             ip1 = f"10.0.{network_counter}.1/24"
             ip2 = f"10.0.{network_counter}.2/24"
 
-            host1 = hosts[i]
-            host2 = hosts[j]
+            host1 = relays[i]
+            host2 = relays[j]
             if delay is None:
                 net.addLink(host1, host2, cls=TCLink,
                 params1={'ip': ip1},
@@ -121,8 +159,7 @@ if __name__ == '__main__':
     ip_counter += 1
 
 
-    for host in net.hosts:
-        if host is not api:
+    for host in relays:
             net.addLink(
                 host, switch, params1={'ip': f"10.1.1.{ip_counter}/24"},
             )
@@ -143,8 +180,7 @@ if __name__ == '__main__':
     )
     host_counter = 1
 
-    for h in net.hosts[:-3]:
-
+    for h in relays:
         ip_address = f'10.3.0.{host_counter}'
         debug(f'Starting relay on {h} - {ip_address}')
 
@@ -159,24 +195,36 @@ if __name__ == '__main__':
 
 
     # the two sleeps are needed at that specific line, bc other way they would start and the exact same time,
-	# and the pub wouldnt connect to the relay, and the sub couldnt connect to the pub
+    # and the pub wouldnt connect to the relay, and the sub couldnt connect to the pub
 
     sleep(0.7)
-    net.hosts[-2].cmd(f'xterm -e bash -c "ffmpeg -hide_banner -stream_loop -1 -re -i ./dev/bbb.mp4 -c copy -an -f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame - | RUST_LOG=info ./target/debug/moq-pub --name bbb https://{first_hop_relay}:4443 --tls-disable-verify" &')
-    debug(f'{net.hosts[-2]}  -  {first_hop_relay}')
-    for i in range(number_of_clients-1):
-        le_id=(i+3)
+    k=0
+    for (h,track) in pubs:
+        h.cmd(f'xterm -e bash -c "ffmpeg -hide_banner -stream_loop -1 -re -i ./dev/{track}.mp4 -c copy -an -f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame - |'
+         f' RUST_LOG=info ./target/debug/moq-pub --name {track} https://{first_hop_relay[k][0]}:4443 --tls-disable-verify" &')
+        debug(f'{net.hosts[k]}  -  {first_hop_relay[k][0]}')
         sleep(0.2)
-        net.hosts[-le_id].cmd(f'xterm -e bash -c "RUST_LOG=info RUST_BACKTRACE=1 ./target/debug/moq-sub --name bbb https://{last_hop_relay[i]}:4443 --tls-disable-verify | ffplay -window_title pipe{i} -x 360 -y 200 -"&')
-        debug(f'{net.hosts[-le_id]}  -  {last_hop_relay[i]}')
+        k+=1
 
-    for i in range(number_of_clients-1):
+    # net.hosts[-2].cmd(f'xterm -e bash -c "ffmpeg -hide_banner -stream_loop -1 -re -i ./dev/bbb.mp4 -c copy -an -f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame - | RUST_LOG=info ./target/debug/moq-pub --name bbb https://{first_hop_relay}:4443 --tls-disable-verify" &')
+
+    k=0
+    for (h,track) in subs:
+        h.cmd(f'xterm -e bash -c "RUST_LOG=info RUST_BACKTRACE=1 ./target/debug/moq-sub --name {track} https://{last_hop_relay[k][0]}:4443 '
+              f' --tls-disable-verify | ffplay -window_title pipe{k} -x 360 -y 200 -"&')
+        debug(f'{h}  -  {last_hop_relay[k][0]}')
+        sleep(0.2)
+        k+=1
+
+    for i in range(len(subs)):
         sleep(1)
         subprocess.call(['xdotool', 'search', '--name', f'pipe{i}', 'windowmove', f'{i*360+50}', '0'])
 
     CLI( net )
-    for i in range(number_of_clients):
-        net.hosts[-(i+2)].cmd('pkill -f xterm')
+    for (h,_) in pubs:
+        h.cmd('pkill -f xterm')
+    for (h,_) in subs:
+        h.cmd('pkill -f xterm')
 
     net.stop()
 
