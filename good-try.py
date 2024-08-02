@@ -45,12 +45,13 @@ if __name__ == '__main__':
     net.staticArp()
 
     switch = net.addSwitch('s1',failMode='standalone')
+    with open("topo.yaml", 'r') as file:
+        num_hosts = yaml.safe_load(file)
 
-
-    with open("topo2.yaml", 'r') as file:
+    with open("delays.yaml", 'r') as file:
         config = yaml.safe_load(file)
 
-    num_hosts = config['nodes']['number']
+    num_hosts = len(num_hosts['nodes'])
     edges = config['edges']
 
     # Create hosts
@@ -63,7 +64,7 @@ if __name__ == '__main__':
     # the first_hop_relay is the relay which the pub will use
     # the last_hop_relay is the relay which the sub(s) will use (with 3 subs the third will fail)
     first_hop_relay = "10.3.0.2"
-    last_hop_relay = ["10.3.0.3","10.3.0.1"]
+    last_hop_relay = ["10.3.0.1","10.3.0.3","10.3.0.4","10.3.0.5","10.3.0.1"]
     number_of_clients = len(last_hop_relay)+1
     hosts = []
 
@@ -171,7 +172,7 @@ if __name__ == '__main__':
 
     for i in range(number_of_clients-1):
         sleep(1)
-        subprocess.call(['xdotool', 'search', '--name', f'pipe{i}', 'windowmove', f'{i*300+0}', '0'])
+        subprocess.call(['xdotool', 'search', '--name', f'pipe{i}', 'windowmove', f'{i*360+50}', '0'])
 
     CLI( net )
     for i in range(number_of_clients):
