@@ -58,9 +58,13 @@ if __name__ == '__main__':
     # 10.4.x/24 - pub and sub to relay connections, there x is a counter
     # the first_hop_relay is the relay which the pub will use
     # the last_hop_relay is the relay which the sub(s) will use (with 3 subs the third will fail, if sleep is higher than 0.2)
-    # > one of the places which you could change the script to add the specific relays to be connected to clients
-    first_hop_relay = [("10.3.0.2", "bbb"),("10.3.0.4", "bbb-rev")]
-    last_hop_relay = [("10.3.0.1", "bbb"),  ("10.3.0.3", "bbb"),  ("10.3.0.5", "bbb-rev")]
+    def relayid_to_ip(relayid):
+        return f"10.3.0.{relayid}"
+
+    # Extract first_hop_relay and last_hop_relay from the config
+    first_hop_relay = [(relayid_to_ip(item['relayid']), item['track']) for item in config['first_hop_relay']]
+    last_hop_relay = [(relayid_to_ip(item['relayid']), item['track']) for item in config['last_hop_relay']]
+
     number_of_clients = len(last_hop_relay)+len(first_hop_relay)
     relays = []
     pubs = []
