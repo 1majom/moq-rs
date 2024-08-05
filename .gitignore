@@ -10,3 +10,4 @@ __pycache__/*
 *.pcapng
 pcaps/*
 ssl/*
+topo.yaml

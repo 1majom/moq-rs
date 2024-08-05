@@ -8,8 +8,14 @@ members = [
 	"moq-clock",
 	"moq-dir",
 	"moq-native",
+	"moq-catalog",
 ]
 resolver = "2"
+
+[workspace.dependencies]
+web-transport = "0.3"
+env_logger = "0.11"
+log = { version = "0.4", features = ["std"] }
 
 # Use debug symbols in production until things are more stable
 [profile.release]
