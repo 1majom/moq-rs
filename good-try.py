@@ -37,7 +37,7 @@ def relayid_to_ip(relayid):
 subprocess.call(['sudo', 'mn', '-c'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 print("** Getting them needed binaries")
 if my_debug:
-    subprocess.run(['rm', 'target/debug/moq-api', 'target/debug/moq-relay'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(['rm', 'target/debug/moq-clock'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 subprocess.run(['sudo', '-u', 'szebala', '/home/szebala/.cargo/bin/cargo', 'build'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 if not os.path.exists("topo.yaml"):
@@ -237,7 +237,10 @@ if __name__ == '__main__':
     sleep(0.7)
     k=0
     for (h,track) in pubs:
-        le_cmd=(f'xterm -hold -e bash -c "ffmpeg -hide_banner -stream_loop -1 -re -i ./dev/{track}.mp4 -c copy -an -f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame - | '
+        if config['clock']:
+            le_cmd=(f'xterm -hold  -T "h{k} - pub" -e bash -c "RUST_LOG=info ./target/debug/moq-clock --publish --namespace {track} https://{first_hop_relay[k][0]}:4443 --tls-disable-verify" &')
+        else:
+            le_cmd=(f'xterm -hold -T "h{k} - pub" -e bash -c "ffmpeg -hide_banner -stream_loop -1 -re -i ./dev/{track}.mp4 -c copy -an -f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame - | '
             f' RUST_LOG=info ./target/debug/moq-pub --name {track} https://{first_hop_relay[k][0]}:4443 --tls-disable-verify" &')
         h.cmd(le_cmd)
         debug(f'{h}  -  {le_cmd}')
@@ -249,8 +252,12 @@ if __name__ == '__main__':
 
     k=0
     for (h,track) in subs:
-        le_cmd=(f'xterm -hold -e bash  -c "RUST_LOG=info RUST_BACKTRACE=1 ./target/debug/moq-sub --name {track} https://{last_hop_relay[k][0]}:4443 '
-              f' --tls-disable-verify | ffplay -window_title pipe{k} -x 360 -y 200 -"&')
+        if config['clock']:
+            le_cmd=(f'xterm -hold  -T "h{k} - sub" -e bash -c "RUST_LOG=info ./target/debug/moq-clock --namespace {track} https://{last_hop_relay[k][0]}:4443 --tls-disable-verify" &')
+        else:
+            le_cmd=(f'xterm -hold -T "h{k} - sub" -e bash  -c "RUST_LOG=info RUST_BACKTRACE=1 ./target/debug/moq-sub --name {track} https://{last_hop_relay[k][0]}:4443 '
+              f' --tls-disable-verify | ffplay -window_title "h{k} - pub" -x 360 -y 200 -"&')
+
         h.cmd(le_cmd)
         debug(f'{h}  -  {le_cmd}')
         debug(f'{h}  -  {last_hop_relay[k][0]}')
@@ -261,7 +268,7 @@ if __name__ == '__main__':
 
     for i in range(len(subs)):
         sleep(0.2)
-        subprocess.call(['xdotool', 'search', '--name', f'pipe{i}', 'windowmove', f'{i*360+50}', '0'])
+        subprocess.call(['xdotool', 'search', '--name', f'"h{k} - sub"', 'windowmove', f'{i*360+50}', '0'])
 
     CLI( net )
     for (h,_) in pubs:

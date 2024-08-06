@@ -53,22 +53,27 @@ impl Publisher {
 		// Everything but the second.
 		let base = now.format("%Y-%m-%d %H:%M:").to_string();
 
+		use chrono::Timelike;
+
 		segment.write(base.clone().into()).context("failed to write base")?;
 
 		loop {
-			let delta = now.format("%S").to_string();
+			let mut now = chrono::Utc::now();
+			let seconds = now.format("%S").to_string();
+			let milliseconds = format!("{:03}", now.timestamp_subsec_millis());
+			let delta = format!("{}.{}", seconds, milliseconds);
 			segment.write(delta.clone().into()).context("failed to write delta")?;
 
 			println!("{}{}", base, delta);
 
-			let next = now + chrono::Duration::try_seconds(1).unwrap();
+			let next = now + chrono::Duration::seconds(1);
 			let next = next.with_nanosecond(0).unwrap();
 
 			let delay = (next - now).to_std().unwrap();
 			tokio::time::sleep(delay).await;
 
 			// Get the current time again to check if we overslept
-			let next = Utc::now();
+			let next = chrono::Utc::now();
 			if next.minute() != now.minute() {
 				return Ok(());
 			}
@@ -118,7 +123,16 @@ impl Subscriber {
 
 			while let Some(object) = group.read_next().await? {
 				let str = String::from_utf8_lossy(&object);
-				println!("{}{}", base, str);
+				// str is like 12:34:56.789
+				// base is like 2021-01-01
+				// parse base and str into DateTime objects
+				let base_datetime = NaiveDateTime::parse_from_str(&format!("{} {}", base, str), "%Y-%m-%d %H:%M:%S%.3f").unwrap();
+				let now_datetime = Utc::now().naive_utc();
+				// subtract base_datetime from now_datetime
+				let difference = now_datetime - base_datetime;
+				// format the difference as a string
+				let difference_str = format!("{}", difference.num_milliseconds());
+				println!("delay:{} sender:{} {} receiver:{}",difference_str, base, str, now_datetime, );
 			}
 		}
 
