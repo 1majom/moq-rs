@@ -37,6 +37,8 @@ impl Producer {
 					tasks.push(async move {
 						let info = subscribe.clone();
 						log::info!("serving subscribe: {:?}", info);
+						log::debug!("serving {:?}", subscribe.namespace);
+
 
 						if let Err(err) = this.serve(subscribe).await {
 							log::warn!("failed serving subscribe: {:?}, error: {}", info, err)
@@ -50,6 +52,7 @@ impl Producer {
 	}
 
 	async fn serve(self, subscribe: Subscribed) -> Result<(), anyhow::Error> {
+
 		if let Some(mut local) = self.locals.route(&subscribe.namespace) {
 			if let Some(track) = local.subscribe(&subscribe.name) {
 				log::info!("serving from local: {:?}", track.info);

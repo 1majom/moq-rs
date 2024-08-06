@@ -44,4 +44,4 @@ trap cleanup EXIT
 
 # Run the relay and forward any arguments
 # cargo run --bin moq-api -- --listen "$LISTEN" --redis "redis://localhost:$REDIS_PORT" "$@"
-./target/debug/moq-api --redis "redis://$REDIS:$REDIS_PORT" --topo-path topo.yaml "$@"
+./target/debug/moq-api --redis "redis://$REDIS:$REDIS_PORT" "$@"

@@ -31,23 +31,27 @@ pub struct ServerConfig {
 
     /// Topology file contents
     #[arg(long)]
-    pub topo_path: std::path::PathBuf,
+    pub topo_path: Option<std::path::PathBuf>,
 }
 
 impl ServerConfig {
-	pub fn topo(&self) -> Result<String, std::io::Error> {
-		std::fs::read_to_string(&self.topo_path)
+	pub fn topo(&self) -> Result<Option<String>, std::io::Error> {
+		if let Some(path) = &self.topo_path {
+			Ok(Some(std::fs::read_to_string(path)?))
+		} else {
+			Ok(None)
+		}
 	}
 }
 
 pub struct Server {
 	config: ServerConfig,
-    topo: String,
+    topo: Option<String>,
 }
 #[derive(Clone)]
 pub struct AppState {
     redis: ConnectionManager,
-    topo: String
+    topo: Option<String>,
 }
 
 
@@ -55,13 +59,12 @@ impl Server {
 	pub fn new(config: ServerConfig) -> Self {
 		let topo = match config.topo() {
 			Ok(s) => s,
-			Err(e) => {
-				eprintln!("Error reading topo: {}", e);
-				return Self { config, topo: String::new() };
+			Err(_e) => {
+				return Self { config, topo: None };
 			}
 		};
 
-		Self { config, topo }
+		Server { config, topo }
 	}
 
 	pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
@@ -71,18 +74,38 @@ impl Server {
 		let redis = redis::Client::open(self.config.redis)?;
 		let redis = redis.get_connection_manager().await?;
 
-		let app = Router::new()
+		// here it should be checked if the topo is none or not
+		// if it is none, then this should happen
+		let app;
+		if self.topo.is_none() {
+			log::debug!("topo is none");
+			app = Router::new()
 				.route(
-					"/origin/:relayid/*namespace",
+					"/origin/*namespace",
 					get(get_origin)
 						.post(set_origin)
+						.delete(delete_origin)
+						.patch(patch_origin),
+				)
+				.with_state(
+					redis
+				);
+		} else {
+			log::debug!("topo is not none");
+			app = Router::new()
+				.route(
+					"/origin/:relayid/*namespace",
+					get(get_origin2).post(set_origin2),
 				)
 				.route(
 					"/origin/:id",
-						delete(delete_origin)
-						.patch(patch_origin),
+					delete(delete_origin2).patch(patch_origin2),
 				)
-				.with_state(AppState { redis, topo: self.topo });
+				.with_state(AppState {
+					redis,
+					topo: self.topo,
+				});
+		}
 
 
 		log::info!("serving requests: bind={}", self.config.bind);
@@ -94,11 +117,11 @@ impl Server {
 	}
 }
 
-async fn get_origin(
+async fn get_origin2(
 	Path((relayid, namespace)): Path<(String, String)>,
 	State(mut state): State<AppState>,
 ) -> Result<Json<Origin>, AppError> {
-	let key = origin_key(&namespace, &relayid);
+	let key = origin_key2(&namespace, &relayid);
 
 	let payload: Option<String> = state.redis.get(&key).await?;
 	let payload = payload.ok_or(AppError::NotFound)?;
@@ -112,13 +135,14 @@ struct Topology {
     edges: Vec<(String, String)>,
 }
 
-async fn set_origin(
+async fn set_origin2(
     State(mut state): State<AppState>,
 	Path((relayid, namespace)): Path<(String, String)>,
     Json(origin): Json<Origin>,
 ) -> Result<(), AppError> {
 
-	let topo: Topology = serde_yaml::from_str(&state.topo).map_err(|_| AppError::Parameter(url::ParseError::IdnaError))?;
+    let topo_str = state.topo.as_deref().ok_or(AppError::Parameter(url::ParseError::IdnaError))?;
+    let topo: Topology = serde_yaml::from_str(topo_str).map_err(|_| AppError::Parameter(url::ParseError::IdnaError))?;
 	if !topo.nodes.contains(&relayid) {
 		log::warn!("!!!not the expected publisher relay {}", relayid);
 		return Err(AppError::Parameter(url::ParseError::IdnaError));
@@ -161,7 +185,7 @@ async fn set_origin(
 
 
 	for (src_key_id, dst_host, dst_port) in relay_info.into_iter() {
-        let key = origin_key(&namespace, &src_key_id);
+        let key = origin_key2(&namespace, &src_key_id);
         let mut url = Url::parse(&origin.url.to_string()).unwrap();
 
 		let _ = url.set_port(Some(dst_port));
@@ -201,7 +225,7 @@ async fn set_origin(
     Ok(())
 }
 
-async fn delete_origin(
+async fn delete_origin2(
 	Path(namespace): Path<String>,
 	State(mut state): State<AppState>,
 ) -> Result<(), AppError> {
@@ -213,7 +237,7 @@ async fn delete_origin(
 }
 
 // Update the expiration deadline.
-async fn patch_origin(
+async fn patch_origin2(
 	Path(namespace): Path<String>,
 	State(mut state): State<AppState>,
 	Json(origin): Json<Origin>,
@@ -237,8 +261,105 @@ async fn patch_origin(
 }
 
 
-fn origin_key(namespace: &str,relayid: &str) -> String {
+
+fn origin_key2(namespace: &str,relayid: &str) -> String {
 	format!("origin.{}.{}",relayid, namespace)
+}
+
+
+
+async fn get_origin(
+	Path(namespace): Path<String>,
+	State(mut redis): State<ConnectionManager>,
+) -> Result<Json<Origin>, AppError> {
+	let key = origin_key(&namespace);
+
+	let payload: Option<String> = redis.get(&key).await?;
+	let payload = payload.ok_or(AppError::NotFound)?;
+	let origin: Origin = serde_json::from_str(&payload)?;
+
+	Ok(Json(origin))
+}
+
+async fn set_origin(
+	State(mut redis): State<ConnectionManager>,
+	Path(namespace): Path<String>,
+	Json(origin): Json<Origin>,
+) -> Result<(), AppError> {
+	// TODO validate origin
+
+	let key = origin_key(&namespace);
+
+	// Convert the input back to JSON after validating it add adding any fields (TODO)
+	let payload = serde_json::to_string(&origin)?;
+
+	// Attempt to get the current value for the key
+	let current: Option<String> = redis::cmd("GET").arg(&key).query_async(&mut redis).await?;
+
+	if let Some(current) = &current {
+		if current.eq(&payload) {
+			// The value is the same, so we're done.
+			return Ok(());
+		} else {
+			return Err(AppError::Duplicate);
+		}
+	}
+
+	let res: Option<String> = redis::cmd("SET")
+		.arg(key)
+		.arg(payload)
+		.arg("NX")
+		.arg("EX")
+		.arg(600) // Set the key to expire in 10 minutes; the origin needs to keep refreshing it.
+		.query_async(&mut redis)
+		.await?;
+
+	if res.is_none() {
+		return Err(AppError::Duplicate);
+	}
+
+	Ok(())
+}
+
+async fn delete_origin(
+	Path(namespace): Path<String>,
+	State(mut redis): State<ConnectionManager>,
+) -> Result<(), AppError> {
+	let key = origin_key(&namespace);
+	match redis.del(key).await? {
+		0 => Err(AppError::NotFound),
+		_ => Ok(()),
+	}
+}
+
+// Update the expiration deadline.
+async fn patch_origin(
+	Path(namespace): Path<String>,
+	State(mut redis): State<ConnectionManager>,
+	Json(origin): Json<Origin>,
+) -> Result<(), AppError> {
+	let key = origin_key(&namespace);
+
+	// Make sure the contents haven't changed
+	// TODO make a LUA script to do this all in one operation.
+	let payload: Option<String> = redis.get(&key).await?;
+	let payload = payload.ok_or(AppError::NotFound)?;
+	let expected: Origin = serde_json::from_str(&payload)?;
+
+	if expected != origin {
+		return Err(AppError::Duplicate);
+	}
+
+	// Reset the timeout to 10 minutes.
+	match redis.expire(key, 600).await? {
+		0 => Err(AppError::NotFound),
+		_ => Ok(()),
+	}
+}
+
+
+fn origin_key(namespace: &str) -> String {
+	format!("origin.{}", namespace)
 }
 
 #[derive(thiserror::Error, Debug)]

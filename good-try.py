@@ -16,23 +16,29 @@ from mininet.node import Node, OVSSwitch
 from mininet.link import TCLink
 from mininet import log
 
+my_debug=False
+
+
 def info(msg):
     log.info(msg + '\n')
 
-my_debug=False
 def debug(msg):
     if my_debug:
         log.info(msg + '\n')
-
-
 
 if not os.geteuid() == 0:
     exit("** This script must be run as root")
 else:
    print("** Running mininet clean")
 
+def relayid_to_ip(relayid):
+    return f"10.3.0.{relayid}"
+
 subprocess.call(['sudo', 'mn', '-c'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 print("** Getting them needed binaries")
+if my_debug:
+    subprocess.run(['rm', 'target/debug/moq-api', 'target/debug/moq-relay'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
 subprocess.run(['sudo', '-u', 'szebala', '/home/szebala/.cargo/bin/cargo', 'build'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 if not os.path.exists("topo.yaml"):
     subprocess.run(['cp', './dev/topos/topo_line.yaml', 'topo.yaml'], check=True)
@@ -48,7 +54,16 @@ if __name__ == '__main__':
     with open("topo.yaml", 'r') as file:
         config = yaml.safe_load(file)
 
+    original_api = config['origi_api']
     relay_number = len(config['nodes'])
+
+    ip_string = ' '.join([f'10.3.0.{i}' for i in range(1, relay_number+1)])
+    with open('./dev/cert', 'r') as file:
+        cert_content = file.readlines()
+    cert_content[-1] = f'go run filippo.io/mkcert -ecdsa -days 10 -cert-file "$CRT" -key-file "$KEY" localhost 127.0.0.1 ::1  {ip_string}'
+    with open('./dev/cert', 'w') as file:
+        file.writelines(cert_content)
+
     edges = config['delays']
     # the different networks are:
     # 10.0.x/24 - relay to relay connections there x is a counter
@@ -58,10 +73,6 @@ if __name__ == '__main__':
     # 10.4.x/24 - pub and sub to relay connections, there x is a counter
     # the first_hop_relay is the relay which the pub will use
     # the last_hop_relay is the relay which the sub(s) will use (with 3 subs the third will fail, if sleep is higher than 0.2)
-    def relayid_to_ip(relayid):
-        return f"10.3.0.{relayid}"
-
-    # Extract first_hop_relay and last_hop_relay from the config
     first_hop_relay = [(relayid_to_ip(item['relayid']), item['track']) for item in config['first_hop_relay']]
     last_hop_relay = [(relayid_to_ip(item['relayid']), item['track']) for item in config['last_hop_relay']]
 
@@ -173,15 +184,31 @@ if __name__ == '__main__':
 
     if my_debug:
         dumpNodeConnections(net.hosts)
+        info("pubs: " + str(pubs))
+        info("subs: " + str(subs))
 
-    api.cmd('REDIS=10.2.0.99 ./dev/api &')
 
-    template_for_relays = (
-        'RUST_LOG=debug RUST_BACKTRACE=0 '
-        './target/debug/moq-relay --bind \'{bind}\' --api {api} --node \'{node}\' '
-        '--tls-cert ./dev/localhost.crt --tls-key ./dev/localhost.key '
-        '--tls-disable-verify --dev &'
-    )
+    template_for_relays=""
+    if original_api:
+        api.cmd('REDIS=10.2.0.99 ./dev/api &')
+        template_for_relays = (
+            'RUST_LOG=debug RUST_BACKTRACE=0 '
+            './target/debug/moq-relay --bind \'{bind}\' --api {api} --node \'{node}\' '
+            '--tls-cert ./dev/localhost.crt --tls-key ./dev/localhost.key '
+            '--tls-disable-verify --dev --original &'
+        )
+    else:
+        api.cmd('REDIS=10.2.0.99 ./dev/api --topo-path topo.yaml &')
+        template_for_relays = (
+            'RUST_LOG=debug RUST_BACKTRACE=0 '
+            './target/debug/moq-relay --bind \'{bind}\' --api {api} --node \'{node}\' '
+            '--tls-cert ./dev/localhost.crt --tls-key ./dev/localhost.key '
+            '--tls-disable-verify --dev &'
+        )
+
+
+
+
     host_counter = 1
 
     for h in relays:
@@ -189,6 +216,12 @@ if __name__ == '__main__':
         debug(f'Starting relay on {h} - {ip_address}')
 
         h.cmd(template_for_relays.format(
+            host=h.name,
+            bind=f'{ip_address}:4443',
+            api=f'http://10.1.1.1',
+            node=f'https://{ip_address}:4443'
+        ))
+        debug(template_for_relays.format(
             host=h.name,
             bind=f'{ip_address}:4443',
             api=f'http://10.1.1.1',
@@ -204,8 +237,10 @@ if __name__ == '__main__':
     sleep(0.7)
     k=0
     for (h,track) in pubs:
-        h.cmd(f'xterm -e bash -c "ffmpeg -hide_banner -stream_loop -1 -re -i ./dev/{track}.mp4 -c copy -an -f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame - |'
-         f' RUST_LOG=info ./target/debug/moq-pub --name {track} https://{first_hop_relay[k][0]}:4443 --tls-disable-verify" &')
+        le_cmd=(f'xterm -hold -e bash -c "ffmpeg -hide_banner -stream_loop -1 -re -i ./dev/{track}.mp4 -c copy -an -f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame - | '
+            f' RUST_LOG=info ./target/debug/moq-pub --name {track} https://{first_hop_relay[k][0]}:4443 --tls-disable-verify" &')
+        h.cmd(le_cmd)
+        debug(f'{h}  -  {le_cmd}')
         debug(f'{net.hosts[k]}  -  {first_hop_relay[k][0]}')
         sleep(0.2)
         k+=1
@@ -214,14 +249,18 @@ if __name__ == '__main__':
 
     k=0
     for (h,track) in subs:
-        h.cmd(f'xterm -e bash -c "RUST_LOG=info RUST_BACKTRACE=1 ./target/debug/moq-sub --name {track} https://{last_hop_relay[k][0]}:4443 '
+        le_cmd=(f'xterm -hold -e bash  -c "RUST_LOG=info RUST_BACKTRACE=1 ./target/debug/moq-sub --name {track} https://{last_hop_relay[k][0]}:4443 '
               f' --tls-disable-verify | ffplay -window_title pipe{k} -x 360 -y 200 -"&')
+        h.cmd(le_cmd)
+        debug(f'{h}  -  {le_cmd}')
         debug(f'{h}  -  {last_hop_relay[k][0]}')
         sleep(0.2)
         k+=1
 
+    sleep(1)
+
     for i in range(len(subs)):
-        sleep(1)
+        sleep(0.2)
         subprocess.call(['xdotool', 'search', '--name', f'pipe{i}', 'windowmove', f'{i*360+50}', '0'])
 
     CLI( net )

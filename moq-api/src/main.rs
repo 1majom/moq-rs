@@ -22,17 +22,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
     let config = ServerConfig::parse();
-	let topo_path_str = config.topo_path.to_str().ok_or("Failed to convert path to string")?;
-	let topo_yaml = read_topology_file(topo_path_str).await?;
-	let topo: Topo = serde_yaml::from_str(&topo_yaml)?;
+    let topo_path_str = config.topo_path.as_deref().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
 
-    validate_topology(&topo)?;
+	if !topo_path_str.is_empty(){
+		if !std::path::Path::new(&topo_path_str).exists() {
+			log::info!("File path does not exist! Defaulting to full mesh.");
+		}
+		// TODO do a switcheroo with the true and false branches
+		else{
+			let topo_yaml = read_topology_file(&topo_path_str).await?;
+			let topo: Topo = serde_yaml::from_str(&topo_yaml)?;
 
-    log::debug!("config: \n{}", topo_yaml);
+			validate_topology(&topo)?;
 
-    let server = Server::new(config);
-    server.run().await?;
+			log::info!("config: \n{}", topo_yaml);
+		}
+	} else {
+		log::info!("File path is empty! Defaulting to full mesh.");
+		// Set default value for topo_path_str here
+	}
 
+	let server = Server::new(config);
+	server.run().await?;
     Ok(())
 }
 

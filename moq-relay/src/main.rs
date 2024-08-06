@@ -50,6 +50,10 @@ pub struct Cli {
 	/// This hosts a HTTPS web server via TCP to serve the fingerprint of the certificate.
 	#[arg(long)]
 	pub dev: bool,
+
+	#[arg(long)]
+	pub original: bool,
+
 }
 
 #[tokio::main]
@@ -70,13 +74,29 @@ async fn main() -> anyhow::Result<()> {
 	}
 
 	// Create a QUIC server for media.
-	let relay = Relay::new(RelayConfig {
-		tls: tls.clone(),
-		bind: cli.bind,
-		node: cli.node,
-		api: cli.api,
-		announce: cli.announce,
-	})?;
+	let relay;
+	if cli.original {
+			relay = Relay::new(RelayConfig {
+				tls: tls.clone(),
+				bind: cli.bind,
+				node: cli.node,
+				api: cli.api,
+				announce: cli.announce,
+				original: true,
+			})?;
+	}else {
+		relay = Relay::new(RelayConfig {
+			tls: tls.clone(),
+			bind: cli.bind,
+			node: cli.node,
+			api: cli.api,
+			announce: cli.announce,
+			original: false,
+		})?;
+
+	}
+
+
 
 	if cli.dev {
 		// Create a web server too.

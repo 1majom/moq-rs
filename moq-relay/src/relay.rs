@@ -24,6 +24,10 @@ pub struct RelayConfig {
 	/// Our hostname which we advertise to other origins.
 	/// We use QUIC, so the certificate must be valid for this address.
 	pub node: Option<Url>,
+
+
+	/// Whether to use the original mode.
+	pub original: bool,
 }
 
 pub struct Relay {
@@ -42,10 +46,12 @@ impl Relay {
 			tls: config.tls,
 		})?;
 
-		let api = if let (Some(url), Some(node)) = (config.api, config.node) {
+		log::info!("expecting original api {}", config.original);
+
+		let api = if let (Some(url), Some(node), original) = (config.api, config.node, config.original) {
 			log::info!("using moq-api: url={} node={}", url, node);
 
-			Some(Api::new(url, node))
+			Some(Api::new(url, node, original))
 		} else {
 			None
 		};
