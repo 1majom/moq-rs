@@ -49,11 +49,9 @@ impl Publisher {
 		}
 	}
 
-	async fn send_segment(mut segment: GroupWriter, mut now: DateTime<Utc>) -> anyhow::Result<()> {
+	async fn send_segment(mut segment: GroupWriter, now: DateTime<Utc>) -> anyhow::Result<()> {
 		// Everything but the second.
 		let base = now.format("%Y-%m-%d %H:%M:").to_string();
-
-		use chrono::Timelike;
 
 		segment.write(base.clone().into()).context("failed to write base")?;
 

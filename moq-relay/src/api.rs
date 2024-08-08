@@ -8,13 +8,8 @@ pub struct Api {
 
 impl Api {
 	pub fn new(url: Url, node: Url, original:bool) -> Self {
-		let origin = moq_api::Origin { url: node.clone() };
-		let mut relayid = node.host().unwrap().to_string();
-		if let Some(last_octet) = relayid.split('.').last() {
-			relayid= last_octet.to_string();
-		}
-
-		let client: moq_api::Client = moq_api::Client::new(url, &relayid, original);
+		let origin = moq_api::Origin { url: node.clone()};
+		let client = moq_api::Client::new(url,node,  original);
 
 		Self { client, origin }
 	}

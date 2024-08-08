@@ -9,15 +9,23 @@ pub struct Client {
 
 	client: reqwest::Client,
 
-	the_type: String,
+	relayid: String,
 
 	original: bool,
 }
 
 impl Client {
-	pub fn new(url: Url, the_type: &str, original: bool) -> Self {
+	pub fn new(url: Url, node:Url, original: bool) -> Self {
 		let client = reqwest::Client::new();
-		Self { url, client, the_type: the_type.to_owned(), original }
+		let parts:Vec<&str> = node.host_str().unwrap().split('.').collect();
+		log::debug!("{:?}",parts);
+
+		if parts.len() > 3 {
+			Self { url: url.clone(), client, relayid:parts[3].to_string() , original }
+		} else {
+			log::info!("The hostname is not an IPv4 address. The specified API won't work.");
+			Self { url: url.clone(), client, relayid:"".to_string() , original:false }
+		}
 	}
 
 	pub async fn get_origin(&self, namespace: &str) -> Result<Option<Origin>, ApiError> {
@@ -26,7 +34,7 @@ impl Client {
 			url = self.url.join("origin/")?.join(namespace)?;
 		}
 		else {
-			url = self.url.join(&format!("origin/{}/{}", self.the_type.to_string(), namespace))?;
+			url = self.url.join(&format!("origin/{}/{}", self.relayid.to_string(), namespace))?;
 		}
 
 		let resp = self.client.get(url).send().await?;
@@ -43,7 +51,7 @@ impl Client {
 			 url = self.url.join("origin/")?.join(namespace)?;
 		}
 		else {
-			let rest=self.the_type.clone().to_string()+"/"+namespace;
+			let rest=self.relayid.clone().to_string()+"/"+namespace;
 			 url = self.url.join("origin/")?.join(&rest)?;
 		}
 

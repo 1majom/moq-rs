@@ -53,7 +53,6 @@ pub struct Cli {
 
 	#[arg(long)]
 	pub original: bool,
-
 }
 
 #[tokio::main]
@@ -74,29 +73,14 @@ async fn main() -> anyhow::Result<()> {
 	}
 
 	// Create a QUIC server for media.
-	let relay;
-	if cli.original {
-			relay = Relay::new(RelayConfig {
-				tls: tls.clone(),
-				bind: cli.bind,
-				node: cli.node,
-				api: cli.api,
-				announce: cli.announce,
-				original: true,
-			})?;
-	}else {
-		relay = Relay::new(RelayConfig {
-			tls: tls.clone(),
-			bind: cli.bind,
-			node: cli.node,
-			api: cli.api,
-			announce: cli.announce,
-			original: false,
-		})?;
-
-	}
-
-
+	let relay = Relay::new(RelayConfig {
+		tls: tls.clone(),
+		bind: cli.bind,
+		node: cli.node,
+		api: cli.api,
+		announce: cli.announce,
+		original: cli.original,
+	})?;
 
 	if cli.dev {
 		// Create a web server too.

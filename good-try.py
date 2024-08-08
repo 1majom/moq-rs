@@ -253,10 +253,10 @@ if __name__ == '__main__':
     k=0
     for (h,track) in subs:
         if config['clock']:
-            le_cmd=(f'xterm -hold  -T "h{k}-sub" -e bash -c "RUST_LOG=info ./target/debug/moq-clock --namespace {track} https://{last_hop_relay[k][0]}:4443 --tls-disable-verify" &')
+            le_cmd=(f'xterm -hold  -T "h{k}-sub-t" -e bash -c "RUST_LOG=info ./target/debug/moq-clock --namespace {track} https://{last_hop_relay[k][0]}:4443 --tls-disable-verify" &')
         else:
-            le_cmd=(f'xterm -hold -T "h{k}-sub" -e bash  -c "RUST_LOG=info RUST_BACKTRACE=1 ./target/debug/moq-sub --name {track} https://{last_hop_relay[k][0]}:4443 '
-              f' --tls-disable-verify | ffplay -window_title \'h{k}-sub\' -x 360 -y 200 -"&')
+            le_cmd=(f'xterm -hold -T "h{k}-sub-t" -e bash  -c "RUST_LOG=info RUST_BACKTRACE=1 ./target/debug/moq-sub --name {track} https://{last_hop_relay[k][0]}:4443 '
+              f' --tls-disable-verify | ffplay -window_title \'h{k}sub\' -x 360 -y 200 -"&')
 
         h.cmd(le_cmd)
         debug(f'{h}  -  {le_cmd}')
@@ -268,7 +268,7 @@ if __name__ == '__main__':
 
     for i in range(len(subs)):
         sleep(0.2)
-        subprocess.call(['xdotool', 'search', '--name', f'"h{k} - sub"', 'windowmove', f'{i*360+50}', '0'])
+        subprocess.call(['xdotool', 'search', '--name', f'h{i}sub', 'windowmove', f'{i*360+50}', '0'])
 
     CLI( net )
     for (h,_) in pubs:

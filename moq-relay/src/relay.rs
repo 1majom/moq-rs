@@ -50,7 +50,6 @@ impl Relay {
 
 		let api = if let (Some(url), Some(node), original) = (config.api, config.node, config.original) {
 			log::info!("using moq-api: url={} node={}", url, node);
-
 			Some(Api::new(url, node, original))
 		} else {
 			None
