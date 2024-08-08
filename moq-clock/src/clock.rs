@@ -132,7 +132,8 @@ impl Subscriber {
 				let difference = now_datetime - base_datetime;
 				// format the difference as a string
 				let difference_str = format!("{}", difference.num_milliseconds());
-				println!("delay:{} sender:{} {} receiver:{}",difference_str, base, str, now_datetime, );
+
+				println!("{}",difference_str );
 			}
 		}
 

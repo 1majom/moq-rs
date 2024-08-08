@@ -238,10 +238,10 @@ if __name__ == '__main__':
     k=0
     for (h,track) in pubs:
         if config['clock']:
-            le_cmd=(f'xterm -hold  -T "h{k} - pub" -e bash -c "RUST_LOG=info ./target/debug/moq-clock --publish --namespace {track} https://{first_hop_relay[k][0]}:4443 --tls-disable-verify" &')
+            le_cmd=(f'xterm -hold  -T "h{k}-pub" -e bash -c "RUST_LOG=info ./target/debug/moq-clock --publish --namespace {track} https://{first_hop_relay[k][0]}:4443 --tls-disable-verify" &')
         else:
-            le_cmd=(f'xterm -hold -T "h{k} - pub" -e bash -c "ffmpeg -hide_banner -stream_loop -1 -re -i ./dev/{track}.mp4 -c copy -an -f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame - | '
-            f' RUST_LOG=info ./target/debug/moq-pub --name {track} https://{first_hop_relay[k][0]}:4443 --tls-disable-verify" &')
+            le_cmd=(f'xterm -hold -T "h{k}-pub" -e bash -c "ffmpeg -hide_banner -stream_loop -1 -re -i ./dev/{track}.mp4 -c copy -an -f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame - '
+                    f' | RUST_LOG=info ./target/debug/moq-pub --name {track} https://{first_hop_relay[k][0]}:4443 --tls-disable-verify" &')
         h.cmd(le_cmd)
         debug(f'{h}  -  {le_cmd}')
         debug(f'{net.hosts[k]}  -  {first_hop_relay[k][0]}')
@@ -253,10 +253,10 @@ if __name__ == '__main__':
     k=0
     for (h,track) in subs:
         if config['clock']:
-            le_cmd=(f'xterm -hold  -T "h{k} - sub" -e bash -c "RUST_LOG=info ./target/debug/moq-clock --namespace {track} https://{last_hop_relay[k][0]}:4443 --tls-disable-verify" &')
+            le_cmd=(f'xterm -hold  -T "h{k}-sub" -e bash -c "RUST_LOG=info ./target/debug/moq-clock --namespace {track} https://{last_hop_relay[k][0]}:4443 --tls-disable-verify" &')
         else:
-            le_cmd=(f'xterm -hold -T "h{k} - sub" -e bash  -c "RUST_LOG=info RUST_BACKTRACE=1 ./target/debug/moq-sub --name {track} https://{last_hop_relay[k][0]}:4443 '
-              f' --tls-disable-verify | ffplay -window_title "h{k} - pub" -x 360 -y 200 -"&')
+            le_cmd=(f'xterm -hold -T "h{k}-sub" -e bash  -c "RUST_LOG=info RUST_BACKTRACE=1 ./target/debug/moq-sub --name {track} https://{last_hop_relay[k][0]}:4443 '
+              f' --tls-disable-verify | ffplay -window_title \'h{k}-sub\' -x 360 -y 200 -"&')
 
         h.cmd(le_cmd)
         debug(f'{h}  -  {le_cmd}')
