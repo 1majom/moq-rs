@@ -15,8 +15,9 @@ from mininet.cli import CLI
 from mininet.node import Node, OVSSwitch
 from mininet.link import TCLink
 from mininet import log
+import os
 
-my_debug=False
+my_debug = os.getenv("MY_DEBUG", False)
 
 
 def info(msg):
@@ -37,7 +38,7 @@ def relayid_to_ip(relayid):
 subprocess.call(['sudo', 'mn', '-c'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 print("** Getting them needed binaries")
 if my_debug:
-    subprocess.run(['rm', 'target/debug/moq-clock'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(['rm', 'target/debug/*'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 subprocess.run(['sudo', '-u', 'szebala', '/home/szebala/.cargo/bin/cargo', 'build'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 if not os.path.exists("topo.yaml"):

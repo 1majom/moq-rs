@@ -4,7 +4,6 @@ logs/
 *.mp4
 .vscode/*
 topo.yaml
-docker-compose.yml
 __pycache__/*
 *.pcap
 *.pcapng
