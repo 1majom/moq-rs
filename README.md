@@ -8,6 +8,28 @@ The py file to start this simulation is good_try.py
 
 The original contents of the README.md can be found bellow the line.
 
+
+A topo.yaml file is need for the good_try.py to work. There an example in topo-def.yaml.
+- origi_api: 	
+    - if true moq-api will always give back the publisher's relay when a relay with a subscriber is searching for a track.
+    - else it will try to use the default "edges" between relays.
+- edges, nodes: these are lists of the relays. the number here will be used as the ip on the loopback interface of the relay as in 10.3.0.x/24 x is the number in the latter mentioned lists
+- first_hop_relay:
+  - a list of relayid and track fields. the relay id should be the relay where we want a publisher to connect. the track is the namespace of that publisher and rightnow also the filename of the wanted .mp4 file
+- last_hop_relay:
+  - the same as first_hop_relay but it's for the subscribers
+- mode:
+  - ffmpeg: the clients will use moq-pub and moq-sub binaries with ffmpeg and ffplay. the binaries can be builf from this repo
+  - clock: the clients will use moq-clock on both ends. the receiving client will give back the seconds passed from the sender sending the timestamp
+  - gst: wip
+    - a bit complicated:
+    - next to this repo 
+      - the 55895e86eddc04584ca042ad287bbd18d5a1bcac commit of moq-gst should be provided
+      - the f629e06991425a7e250bb3a771fa9c211cde0c08 commit of [latency clock](https://github.com/SNS-JU/6gxr-latency-clock.git) should be provided
+    - it might only work with gstreamer 1.22
+    - this mode will not stream a video in a looped way
+
+
 ***
 
 

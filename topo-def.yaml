@@ -1,0 +1,34 @@
+origi_api: true
+# ffmpeg, clock, for test gst
+mode: gst
+
+nodes:
+    - 1
+    - 2
+    - 3
+
+
+
+edges:
+- - 1
+  - 2
+- - 2
+  - 3
+
+
+
+
+first_hop_relay:
+- relayid: 1
+  track: "bbb"
+
+last_hop_relay:
+- relayid: 2
+  track: "bbb"
+
+
+
+delays:
+  - node1: 2
+    node2: 3
+    delay: 0

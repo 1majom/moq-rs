@@ -16,6 +16,7 @@ from mininet.node import Node, OVSSwitch
 from mininet.link import TCLink
 from mininet import log
 import os
+import datetime
 
 my_debug = os.getenv("MY_DEBUG", False)
 
@@ -188,7 +189,6 @@ if __name__ == '__main__':
         info("pubs: " + str(pubs))
         info("subs: " + str(subs))
 
-
     template_for_relays=""
     if original_api:
         api.cmd('REDIS=10.2.0.99 ./dev/api &')
@@ -235,29 +235,50 @@ if __name__ == '__main__':
     # the two sleeps are needed at that specific line, bc other way they would start and the exact same time,
     # and the pub wouldnt connect to the relay, and the sub couldnt connect to the pub
 
-    sleep(0.7)
+
+    # ...
+
+    sleep(1)
     k=0
     for (h,track) in pubs:
-        if config['clock']:
+        if config['mode'] == 'clock':
             le_cmd=(f'xterm -hold  -T "h{k}-pub" -e bash -c "RUST_LOG=info ./target/debug/moq-clock --publish --namespace {track} https://{first_hop_relay[k][0]}:4443 --tls-disable-verify" &')
         else:
-            le_cmd=(f'xterm -hold -T "h{k}-pub" -e bash -c "ffmpeg -hide_banner -stream_loop -1 -re -i ./dev/{track}.mp4 -c copy -an -f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame - '
+            if config['mode'] == 'ffmpeg':
+                le_cmd=(f'xterm -hold -T "h{k}-pub" -e bash -c "ffmpeg -hide_banner -stream_loop -1 -re -i ./dev/{track}.mp4 -c copy -an -f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame - '
                     f' | RUST_LOG=info ./target/debug/moq-pub --name {track} https://{first_hop_relay[k][0]}:4443 --tls-disable-verify" &')
-        h.cmd(le_cmd)
+            else:
+                if config['mode'] == 'gst':
+                    le_cmd=f'xterm -hold  -T "h{k}-pub" -e bash -c "export GST_PLUGIN_PATH="${{PWD}}/../moq-gst/target/debug${{GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}}:${{PWD}}/../6gxr-latency-clock"; gst-launch-1.0 -q -v -e filesrc location="./dev/{track}.mp4"  ! decodebin ! videoconvert ! timestampoverlay ! videoconvert ! x264enc ! h264parse ! isofmp4mux name=mux chunk-duration=1 fragment-duration=1 ! moqsink tls-disable-verify=true url="https://{first_hop_relay[k][0]}:4443" namespace="{track}" "&'
+                else:
+                    le_cmd=f'xterm -hold  -T "h{k}-pub" -e bash -c "export GST_PLUGIN_PATH="${{PWD}}/../moq-gst/target/debug${{GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}}:${{PWD}}/../6gxr-latency-clock"; gst-launch-1.0 -v -e multifilesrc location="$INPUT" loop=true ! qtdemux name=demux '
+                    f'demux.video_0 ! h264parse ! queue ! identity sync=true ! isofmp4mux name=mux chunk-duration=1 fragment-duration=1 ! moqsink   tls-disable-verify=true url="https://{first_hop_relay[k][0]}:4443" namespace="{track}" "&'
         debug(f'{h}  -  {le_cmd}')
         debug(f'{net.hosts[k]}  -  {first_hop_relay[k][0]}')
+        h.cmd(le_cmd)
         sleep(0.2)
         k+=1
 
     # net.hosts[-2].cmd(f'xterm -e bash -c "ffmpeg -hide_banner -stream_loop -1 -re -i ./dev/bbb.mp4 -c copy -an -f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame - | RUST_LOG=info ./target/debug/moq-pub --name bbb https://{first_hop_relay}:4443 --tls-disable-verify" &')
 
+
+    # if this is 1.5 or more it will cause problems
+    # around 0.7 needed
+    sleep(0.7)
+
+
     k=0
     for (h,track) in subs:
-        if config['clock']:
+        if config['mode'] == 'clock':
             le_cmd=(f'xterm -hold  -T "h{k}-sub-t" -e bash -c "RUST_LOG=info ./target/debug/moq-clock --namespace {track} https://{last_hop_relay[k][0]}:4443 --tls-disable-verify" &')
         else:
-            le_cmd=(f'xterm -hold -T "h{k}-sub-t" -e bash  -c "RUST_LOG=info RUST_BACKTRACE=1 ./target/debug/moq-sub --name {track} https://{last_hop_relay[k][0]}:4443 '
+            if config['mode'] == 'ffmpeg':
+                  le_cmd=(f'xterm -hold -T "h{k}-sub-t" -e bash  -c "RUST_LOG=info RUST_BACKTRACE=1 ./target/debug/moq-sub --name {track} https://{last_hop_relay[k][0]}:4443 '
               f' --tls-disable-verify | ffplay -window_title \'h{k}sub\' -x 360 -y 200 -"&')
+            else:
+                current_time = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+                filename = f"measurements/{current_time}_{h.name}_{track}"
+                le_cmd = f'xterm -hold -T "h{k}-sub-t" -e bash  -c "export GST_PLUGIN_PATH="${{PWD}}/../moq-gst/target/debug${{GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}}:${{PWD}}/../6gxr-latency-clock"; ./target/debug/moq-sub --name {track} https://{last_hop_relay[k][0]}:4443 | GST_DEBUG=timeoverlayparse:4 gst-launch-1.0 fdsrc ! decodebin ! videoconvert ! timeoverlayparse ! videoconvert ! autovideosink 2> {filename}.txt"&'
 
         h.cmd(le_cmd)
         debug(f'{h}  -  {le_cmd}')
@@ -273,8 +294,12 @@ if __name__ == '__main__':
 
     CLI( net )
     for (h,_) in pubs:
+        if config['mode'] == 'gst':
+            h.cmd('pkill -f gst-launch')
         h.cmd('pkill -f xterm')
     for (h,_) in subs:
+        if config['mode'] == 'gst':
+            h.cmd('pkill -f gst-launch')
         h.cmd('pkill -f xterm')
 
     net.stop()
