@@ -17,9 +17,14 @@ from mininet.link import TCLink
 from mininet import log
 import os
 import datetime
+import glob
+import re
+import numpy as np
 
 my_debug = os.getenv("MY_DEBUG", False)
-
+all_gas_no_brakes = os.getenv("NO_BRAKES", True)
+printit= os.getenv("PRINTIT", True)
+video_on= os.getenv("VIDEON_ON", False)
 
 def info(msg):
     log.info(msg + '\n')
@@ -28,26 +33,27 @@ def debug(msg):
     if my_debug:
         log.info(msg + '\n')
 
-if not os.geteuid() == 0:
-    exit("** This script must be run as root")
-else:
-   print("** Running mininet clean")
-
 def relayid_to_ip(relayid):
     return f"10.3.0.{relayid}"
 
+if not os.geteuid() == 0:
+    exit("** This script must be run as root")
+else:
+   print("** Mopping up remaining mininet")
 subprocess.call(['sudo', 'mn', '-c'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-print("** Getting them needed binaries")
+
+print("** Folding them needed binaries")
 if my_debug:
     subprocess.run(['rm', 'target/debug/*'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
 subprocess.run(['sudo', '-u', 'szebala', '/home/szebala/.cargo/bin/cargo', 'build'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
 if not os.path.exists("topo.yaml"):
     subprocess.run(['cp', './dev/topos/topo_line.yaml', 'topo.yaml'], check=True)
 
 if __name__ == '__main__':
 
     setLogLevel( 'info' )
+
 
     net = Mininet( topo=None, waitConnected=True, link=partial(TCLink) )
     net.staticArp()
@@ -59,13 +65,16 @@ if __name__ == '__main__':
     original_api = config['origi_api']
     relay_number = len(config['nodes'])
 
+    print("** Baking fresh cert")
     ip_string = ' '.join([f'10.3.0.{i}' for i in range(1, relay_number+1)])
     with open('./dev/cert', 'r') as file:
         cert_content = file.readlines()
     cert_content[-1] = f'go run filippo.io/mkcert -ecdsa -days 10 -cert-file "$CRT" -key-file "$KEY" localhost 127.0.0.1 ::1  {ip_string}'
     with open('./dev/cert', 'w') as file:
         file.writelines(cert_content)
-
+    env = os.environ.copy()
+    env['PATH'] = '/usr/local/go:/usr/local/go/bin:' + env['PATH']
+    subprocess.call(['./dev/cert'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     edges = config['delays']
     # the different networks are:
     # 10.0.x/24 - relay to relay connections there x is a counter
@@ -148,10 +157,12 @@ if __name__ == '__main__':
                 params1={'ip': ip1},
                 params2={'ip': ip2})
             else:
+                info(f"\n** this delay is put between {host1} {host2}")
                 net.addLink(host1, host2, cls=TCLink, delay=f'{delay}ms',
                 params1={'ip': ip1},
                 params2={'ip': ip2})
-                info(f"\n** the last printed delays are put between {host1} {host2}")
+                info(f"\n")
+
             ip1 = f"10.0.{network_counter}.1"
             ip2 = f"10.0.{network_counter}.2"
             host1.cmd(f'ip route add 10.3.0.{j+1}/32 via {ip2}')
@@ -236,8 +247,6 @@ if __name__ == '__main__':
     # and the pub wouldnt connect to the relay, and the sub couldnt connect to the pub
 
 
-    # ...
-
     sleep(1)
     k=0
     for (h,track) in pubs:
@@ -249,10 +258,11 @@ if __name__ == '__main__':
                     f' | RUST_LOG=info ./target/debug/moq-pub --name {track} https://{first_hop_relay[k][0]}:4443 --tls-disable-verify" &')
             else:
                 if config['mode'] == 'gst':
-                    le_cmd=f'xterm -hold  -T "h{k}-pub" -e bash -c "export GST_PLUGIN_PATH="${{PWD}}/../moq-gst/target/debug${{GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}}:${{PWD}}/../6gxr-latency-clock"; gst-launch-1.0 -q -v -e filesrc location="./dev/{track}.mp4"  ! decodebin ! videoconvert ! timestampoverlay ! videoconvert ! x264enc ! h264parse ! isofmp4mux name=mux chunk-duration=1 fragment-duration=1 ! moqsink tls-disable-verify=true url="https://{first_hop_relay[k][0]}:4443" namespace="{track}" "&'
-                else:
-                    le_cmd=f'xterm -hold  -T "h{k}-pub" -e bash -c "export GST_PLUGIN_PATH="${{PWD}}/../moq-gst/target/debug${{GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}}:${{PWD}}/../6gxr-latency-clock"; gst-launch-1.0 -v -e multifilesrc location="$INPUT" loop=true ! qtdemux name=demux '
-                    f'demux.video_0 ! h264parse ! queue ! identity sync=true ! isofmp4mux name=mux chunk-duration=1 fragment-duration=1 ! moqsink   tls-disable-verify=true url="https://{first_hop_relay[k][0]}:4443" namespace="{track}" "&'
+                    holder=" "
+                    if my_debug:
+                        holder=" -hold "
+                    le_cmd=f'xterm {holder} -T "h{k}-pub" -e bash -c "export GST_PLUGIN_PATH="${{PWD}}/../moq-gst/target/debug${{GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}}:${{PWD}}/../6gxr-latency-clock"; gst-launch-1.0 -q -v -e filesrc location="./dev/{track}.mp4"  ! decodebin ! videoconvert ! timestampoverlay ! videoconvert ! x264enc tune=zerolatency ! h264parse ! isofmp4mux name=mux chunk-duration=1 fragment-duration=1 ! moqsink tls-disable-verify=true url="https://{first_hop_relay[k][0]}:4443" namespace="{track}"; sleep 7 "&'
+
         debug(f'{h}  -  {le_cmd}')
         debug(f'{net.hosts[k]}  -  {first_hop_relay[k][0]}')
         h.cmd(le_cmd)
@@ -274,11 +284,15 @@ if __name__ == '__main__':
         else:
             if config['mode'] == 'ffmpeg':
                   le_cmd=(f'xterm -hold -T "h{k}-sub-t" -e bash  -c "RUST_LOG=info RUST_BACKTRACE=1 ./target/debug/moq-sub --name {track} https://{last_hop_relay[k][0]}:4443 '
-              f' --tls-disable-verify | ffplay -window_title \'h{k}sub\' -x 360 -y 200 -"&')
+              f' --tls-disable-verify | ffplay -window_title \'h{k}sub\' -x 360 -y 200 - "&')
             else:
                 current_time = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
                 filename = f"measurements/{current_time}_{h.name}_{track}"
-                le_cmd = f'xterm -hold -T "h{k}-sub-t" -e bash  -c "export GST_PLUGIN_PATH="${{PWD}}/../moq-gst/target/debug${{GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}}:${{PWD}}/../6gxr-latency-clock"; ./target/debug/moq-sub --name {track} https://{last_hop_relay[k][0]}:4443 | GST_DEBUG=timeoverlayparse:4 gst-launch-1.0 fdsrc ! decodebin ! videoconvert ! timeoverlayparse ! videoconvert ! autovideosink 2> {filename}.txt"&'
+                le_sink="autovideosink"
+                if not video_on:
+                    le_sink="fakesink"
+
+                le_cmd=f'xterm  -hold  -T "h{k}-sub-t" -e bash  -c "export GST_PLUGIN_PATH="${{PWD}}/../moq-gst/target/debug${{GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}}:${{PWD}}/../6gxr-latency-clock" RST_LOG=debug; ./target/debug/moq-sub --name {track} https://{last_hop_relay[k][0]}:4443 | GST_DEBUG=timeoverlayparse:4 gst-launch-1.0 --no-position filesrc location=/dev/stdin ! decodebin ! videoconvert ! timeoverlayparse ! videoconvert ! {le_sink} 2> {filename}.txt" &'
 
         h.cmd(le_cmd)
         debug(f'{h}  -  {le_cmd}')
@@ -288,11 +302,31 @@ if __name__ == '__main__':
 
     sleep(1)
 
-    for i in range(len(subs)):
-        sleep(0.2)
-        subprocess.call(['xdotool', 'search', '--name', f'h{i}sub', 'windowmove', f'{i*360+50}', '0'])
+    if video_on:
+        if config['mode'] == 'gst':
+            process_ids = subprocess.check_output(['xdotool', 'search', '--name', 'gst-launch']).decode().split()
+            for i, process_id in enumerate(process_ids):
+                sleep(0.2)
 
-    CLI( net )
+                subprocess.call(['xdotool', 'windowmove', process_id, f'{i*360+50}', '0'])
+        else:
+            for i in range(len(subs)):
+                sleep(0.2)
+                subprocess.call(['xdotool', 'search', '--name', f'h{i}sub', 'windowmove', f'{i*360+50}', '0'])
+
+    def get_video_duration(file_path):
+        command = ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', file_path]
+        output = subprocess.check_output(command).decode().strip()
+        duration = float(output)
+        return duration
+
+    track_duration = get_video_duration(f"./dev/{track}.mp4")
+
+    sleep(track_duration+5)
+    if not all_gas_no_brakes:
+        CLI( net )
+
+
     for (h,_) in pubs:
         if config['mode'] == 'gst':
             h.cmd('pkill -f gst-launch')
@@ -303,6 +337,36 @@ if __name__ == '__main__':
         h.cmd('pkill -f xterm')
 
     net.stop()
+    if printit & (config['mode'] == 'gst'):
+        folder_path='measurements'
+        list_of_files = glob.glob(os.path.join(folder_path, '*'))
+        latest_files = sorted(list_of_files, key=os.path.getctime, reverse=True)[:len(subs)]
+        latencies = []
+        print("file_path: average; median; percentile_99")
+        def convert_to_seconds(nanoseconds):
+            return nanoseconds / 1e9
+
+        def calculate_statistics(latencies):
+            latencies_in_seconds = [convert_to_seconds(lat) for lat in latencies]
+            average = np.mean(latencies_in_seconds)
+            median = np.median(latencies_in_seconds)
+            percentile_99 = np.percentile(latencies_in_seconds, 99)
+            return average, median, percentile_99
+        def extract_latency(line):
+            match = re.search(r'Latency: (\d+)', line)
+            if match:
+                return int(match.group(1))
+            return None
+        for file_path in latest_files:
+            with open(file_path, 'r') as file:
+                file_latencies = []
+                for line in file:
+                    latency = extract_latency(line)
+                    if latency is not None:
+                        file_latencies.append(latency)
+                if file_latencies:
+                    average, median, percentile_99 = calculate_statistics(file_latencies)
+                    print(f"{file_path}: {average}; {median}; {percentile_99}")
 
 
 
