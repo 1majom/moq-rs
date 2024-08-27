@@ -14,3 +14,5 @@ Cargo.lock
 topo copy 2.yaml
 measurements/
 test-gcp-type-beat.json
+dev/cert2
+topo.json

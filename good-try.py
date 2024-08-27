@@ -3,6 +3,7 @@
 import os
 import subprocess
 import yaml
+import json
 from functools import partial
 from time import sleep
 from sys import exit  # pylint: disable=redefined-builtin
@@ -25,6 +26,7 @@ my_debug = os.getenv("MY_DEBUG", False)
 all_gas_no_brakes = os.getenv("NO_BRAKES", True)
 printit= os.getenv("PRINTIT", True)
 video_on= os.getenv("VIDEON_ON", False)
+okos_komp_is_here = os.getenv("OKOS_KOMP", True)
 
 def info(msg):
     log.info(msg + '\n')
@@ -59,22 +61,41 @@ if __name__ == '__main__':
     net.staticArp()
 
     switch = net.addSwitch('s1',failMode='standalone')
-    with open("topo.yaml", 'r') as file:
-        config = yaml.safe_load(file)
+    if not okos_komp_is_here:
+        with open("topo.yaml", 'r') as file:
+            config = yaml.safe_load(file)
+    else:
+        with open("topo.json", 'r') as file:
+            config = json.load(file)
 
     original_api = config['origi_api']
     relay_number = len(config['nodes'])
+    if okos_komp_is_here:
+        node_names = [item['name'] for item in config['nodes']]
+        edges = config['edges']
+        connections = []
+        for edge in edges:
+            src = edge['src']
+            dst = edge['dst']
+            src_index = node_names.index(src) + 1
+            dst_index = node_names.index(dst) + 1
+            latency = edge['attributes']['latency']
+            connection = {'node1': src_index, 'node2': dst_index, 'delay': latency}
+            connections.append(connection)
+            debug(f"I see {src} to {dst} at index {connection['node1']} and {connection['node2']} with latency {connection['delay']}ms")
+        config['delays'] = connections
+
 
     print("** Baking fresh cert")
     ip_string = ' '.join([f'10.3.0.{i}' for i in range(1, relay_number+1)])
     with open('./dev/cert', 'r') as file:
         cert_content = file.readlines()
     cert_content[-1] = f'go run filippo.io/mkcert -ecdsa -days 10 -cert-file "$CRT" -key-file "$KEY" localhost 127.0.0.1 ::1  {ip_string}'
-    with open('./dev/cert', 'w') as file:
+    with open('./dev/cert2', 'w') as file:
         file.writelines(cert_content)
     env = os.environ.copy()
     env['PATH'] = '/usr/local/go:/usr/local/go/bin:' + env['PATH']
-    subprocess.call(['./dev/cert'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.call(['./dev/cert2'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     edges = config['delays']
     # the different networks are:
     # 10.0.x/24 - relay to relay connections there x is a counter
