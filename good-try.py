@@ -20,6 +20,9 @@ import glob
 import re
 import numpy as np
 import re
+import os
+import datetime
+import subprocess
 
 my_debug = os.getenv("MY_DEBUG", False)
 all_gas_no_brakes= os.getenv("NO_BRAKES", False)
@@ -36,9 +39,9 @@ def debug(msg):
     if my_debug:
         log.info(msg + '\n')
 
-def relayid_to_ip(relayid, node_names):
-    index = node_names.index(relayid) + 1
-    return f"10.3.0.{index}"
+def relayid_to_ip(relayname, node_names):
+    relayid=node_names.index(relayname) + 1
+    return f"10.3.0.{relayid}"
 
 if not os.geteuid() == 0:
     exit("** This script must be run as root")
@@ -59,12 +62,38 @@ for i in range(num_of_tries):
     if __name__ == '__main__':
 
         setLogLevel( 'info' )
+        baseline_file = datetime.datetime.now().strftime("assumedbaseline_%Y%m%d.txt")
+        baseline_path = os.path.join('measurements', baseline_file)
+        based_line=0.0
+
+        if os.path.exists(baseline_path):
+            with open(baseline_path, 'r') as file:
+                baseline_content = file.read().strip()
+
+            try:
+                based_line = float(baseline_content)
+
+            except ValueError:
+                # Start the base_try.py script
+                subprocess.call(['sudo', 'python', 'base_try.py'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                with open(baseline_path, 'r') as file:
+                    baseline_content = file.read().strip()
+                    based_line = float(baseline_content)
+        else:
+            # Start the base_try.py script
+            subprocess.call(['sudo', 'python', 'base_try.py'])
+
+            with open(baseline_path, 'r') as file:
+                baseline_content = file.read().strip()
+                based_line = float(baseline_content)
+
 
         net = Mininet( topo=None, waitConnected=True, link=partial(TCLink) )
         net.staticArp()
 
         switch = net.addSwitch('s1',failMode='standalone')
-        with open("../cdn-optimization/datasource/small_topo.yaml", 'r') as file:
+        # with open("../cdn-optimization/datasource/tiniest_topo.yaml", 'r') as file:
+        with open("topo.yaml", 'r') as file:
             config = yaml.safe_load(file)
 
         relay_number = len(config['nodes'])
@@ -107,9 +136,10 @@ for i in range(num_of_tries):
         the last_hop_relay is the relay which the sub(s) will use (with 3 subs the third will fail, if sleep is higher than 0.2)
         """
 
-
         first_hop_relay = [(relayid_to_ip(item['relayid'], node_names), item['track']) for item in config['first_hop_relay']]
-        last_hop_relay = [(relayid_to_ip(item['relayid'],node_names), item['track']) for item in config['last_hop_relay']]
+        last_hop_relay = [(relayid_to_ip(item['relayid'], node_names), item['track']) for item in config['last_hop_relay']]
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        print(first_hop_relay)
         number_of_clients = len(last_hop_relay)+len(first_hop_relay)
         relays = []
         pubs = []
@@ -476,6 +506,7 @@ for i in range(num_of_tries):
                     if file_latencies:
                         average, median, percentile_99 = calculate_statistics(file_latencies)
                         print(f">> average; median; percentile_99 timestampoverlay data: {average}; {median}; {percentile_99}")
+                        print(f">> subtracting based line: {average-based_line}")
                         if gst_shark==2:
                             print(f">> subtracting avarage interlatency: {average-baseline}")
                         if gst_shark==1:
