@@ -26,10 +26,11 @@ import subprocess
 
 my_debug = os.getenv("MY_DEBUG", False)
 all_gas_no_brakes= os.getenv("NO_BRAKES", False)
-video_on= os.getenv("VIDEO_ON", False)
-tls_verify= os.getenv("TLS_VERIFY", True)
+video_on= os.getenv("LOOKY", False)
+forklift_certified = not os.getenv("NO_CERT", False)
 num_of_tries = int(os.getenv("NUMERO", 1))
-gst_shark = int(os.getenv("GST_SHARK", 0))
+gst_shark = int(os.getenv("SHARK", 0))
+topofile= os.getenv("TOPO", "datasource/tiniest_topo.yaml")
 
 
 def info(msg):
@@ -56,8 +57,6 @@ for i in range(num_of_tries):
         subprocess.run(['rm', 'target/debug/*'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.run(['sudo', '-u', 'szebala', '/home/szebala/.cargo/bin/cargo', 'build'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    if not os.path.exists("topo.yaml"):
-        subprocess.run(['cp', './dev/topos/topo_line.yaml', 'topo.yaml'], check=True)
 
     if __name__ == '__main__':
 
@@ -92,8 +91,7 @@ for i in range(num_of_tries):
         net.staticArp()
 
         switch = net.addSwitch('s1',failMode='standalone')
-        # with open("../cdn-optimization/datasource/tiniest_topo.yaml", 'r') as file:
-        with open("topo.yaml", 'r') as file:
+        with open(f"../cdn-optimization/{topofile}", 'r') as file:
             config = yaml.safe_load(file)
 
         relay_number = len(config['nodes'])
@@ -138,8 +136,7 @@ for i in range(num_of_tries):
 
         first_hop_relay = [(relayid_to_ip(item['relayid'], node_names), item['track']) for item in config['first_hop_relay']]
         last_hop_relay = [(relayid_to_ip(item['relayid'], node_names), item['track']) for item in config['last_hop_relay']]
-        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-        print(first_hop_relay)
+
         number_of_clients = len(last_hop_relay)+len(first_hop_relay)
         relays = []
         pubs = []
@@ -266,7 +263,7 @@ for i in range(num_of_tries):
             api.cmd('REDIS=10.2.0.99 ./dev/api --bind [::]:4442 &')
         else:
             if config['api']=="opti":
-                api.cmd('cd ../cdn-optimization; source env/bin/activate; python -m fastapi dev app/api.py --host 10.1.1.1 --port 4442 &')
+                api.cmd(f'cd ../cdn-optimization; source env/bin/activate; TOPOFILE={topofile} python -m fastapi dev app/api.py --host 10.1.1.1 --port 4442 &')
 
             # else:
             #     api.cmd('REDIS=10.2.0.99 ./dev/api --topo-path topo.yaml --bind [::]:4442 &')
@@ -279,12 +276,12 @@ for i in range(num_of_tries):
 
         # for some reason this is needed or the first relay wont reach the api
         # (ffmpeg needs the 1s, gst can work with less)
-        sleep(1)
+        sleep(2)
 
         host_counter = 1
 
         tls_verify_str = ""
-        if not tls_verify:
+        if not forklift_certified:
             tls_verify_str = "--tls-disable-verify"
 
         for h in relays:
@@ -337,10 +334,10 @@ for i in range(num_of_tries):
                 max_resolution=int(resolution)
 
             if config['mode'] == 'clock':
-                le_cmd=(f'xterm -hold  -T "h{k}-pub" -e bash -c "RUST_LOG=info ./target/debug/moq-clock --publish --namespace {track} https://{first_hop_relay[k][0]}:4443 --tls-disable-verify" &')
+                le_cmd=(f'xterm -hold  -T "{h.name}-pub" -e bash -c "RUST_LOG=info ./target/debug/moq-clock --publish --namespace {track} https://{first_hop_relay[k][0]}:4443 --tls-disable-verify" &')
             else:
                 if config['mode'] == 'ffmpeg':
-                    le_cmd=(f'xterm -hold -T "h{k}-pub" -e bash -c "ffmpeg -hide_banner -stream_loop -1 -re -i ./dev/{vidi_filenammm}.mp4 -c copy -an -f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame - '
+                    le_cmd=(f'xterm -hold -T "{h.name}-pub" -e bash -c "ffmpeg -hide_banner -stream_loop -1 -re -i ./dev/{vidi_filenammm}.mp4 -c copy -an -f mp4 -movflags cmaf+separate_moof+delay_moov+skip_trailer+frag_every_frame - '
                         f' | RUST_LOG=info ./target/debug/moq-pub --name {track} https://{first_hop_relay[k][0]}:4443 --tls-disable-verify" &')
                 else:
                     if config['mode'] == 'gst':
@@ -355,7 +352,7 @@ for i in range(num_of_tries):
                         if gst_shark==2:
                             gst_shark_str+='export GST_TRACERS="interlatency";'
 
-                        le_cmd=f'xterm {holder} -T "h{k}-pub" -e bash -c "export GST_PLUGIN_PATH="${{PWD}}/../moq-gst/target/debug${{GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}}:${{PWD}}/../6gxr-latency-clock"; {gst_shark_str} gst-launch-1.0 -q -v -e filesrc location="./dev/{vidi_filenammm}.mp4"  ! qtdemux name=before01 \
+                        le_cmd=f'xterm {holder} -T "{h.name}-pub" -e bash -c "export GST_PLUGIN_PATH="${{PWD}}/../moq-gst/target/debug${{GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}}:${{PWD}}/../6gxr-latency-clock"; {gst_shark_str} gst-launch-1.0 -q -v -e filesrc location="./dev/{vidi_filenammm}.mp4"  ! qtdemux name=before01 \
   before01.video_0 ! h264parse name=before02 ! avdec_h264 name=before03 ! videoconvert name=before2 ! timestampoverlay name=middle ! videoconvert name=after1 ! x264enc tune=zerolatency name=after2 ! h264parse name=after3 ! isofmp4mux chunk-duration=1 fragment-duration=1 name=after4 ! moqsink tls-disable-verify=true url="https://{first_hop_relay[k][0]}:4443" namespace="{track}" 2> measurements/baseline_{track}_{current_time}_{h.name}.txt ; sleep 3 "&'
 
             debug(f'{h}  -  {le_cmd}')
@@ -372,18 +369,18 @@ for i in range(num_of_tries):
         k=0
         for (h,track) in subs:
             if config['mode'] == 'clock':
-                le_cmd=(f'xterm -hold  -T "h{k}-sub-t" -e bash -c "RUST_LOG=info ./target/debug/moq-clock --namespace {track} https://{last_hop_relay[k][0]}:4443 --tls-disable-verify" &')
+                le_cmd=(f'xterm -hold  -T "{h.name}-sub-t" -e bash -c "RUST_LOG=info ./target/debug/moq-clock --namespace {track} https://{last_hop_relay[k][0]}:4443 --tls-disable-verify" &')
             else:
                 if config['mode'] == 'ffmpeg':
-                      le_cmd=(f'xterm -hold -T "h{k}-sub-t" -e bash  -c "RUST_LOG=info RUST_BACKTRACE=1 ./target/debug/moq-sub --name {track} https://{last_hop_relay[k][0]}:4443 '
-                  f' --tls-disable-verify | ffplay -window_title \'h{k}sub\' -x 360 -y 200 - "&')
+                      le_cmd=(f'xterm -hold -T "{h.name}-sub-t" -e bash  -c "RUST_LOG=info RUST_BACKTRACE=1 ./target/debug/moq-sub --name {track} https://{last_hop_relay[k][0]}:4443 '
+                  f' --tls-disable-verify | ffplay -window_title \'{h.name}sub\' -x 360 -y 200 - "&')
                 else:
                     filename = f"measurements/{track}_{current_time}_{h.name}"
                     le_sink="autovideosink"
                     if not video_on:
                         le_sink="fakesink"
 
-                    le_cmd=f'xterm  -hold  -T "h{k}-sub-t" -e bash  -c "export GST_PLUGIN_PATH="${{PWD}}/../moq-gst/target/debug${{GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}}:${{PWD}}/../6gxr-latency-clock"; export RST_LOG=debug; ./target/debug/moq-sub --name {track} https://{last_hop_relay[k][0]}:4443 | GST_DEBUG=timeoverlayparse:4 gst-launch-1.0 --no-position filesrc location=/dev/stdin ! decodebin ! videoconvert ! timeoverlayparse ! videoconvert ! {le_sink} 2> {filename}.txt" &'
+                    le_cmd=f'xterm  -hold  -T "{h.name}-sub-t" -e bash  -c "export GST_PLUGIN_PATH="${{PWD}}/../moq-gst/target/debug${{GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}}:${{PWD}}/../6gxr-latency-clock"; export RUST_LOG=debug; ./target/debug/moq-sub --name {track} https://{last_hop_relay[k][0]}:4443 | GST_DEBUG=timeoverlayparse:4 gst-launch-1.0 --no-position filesrc location=/dev/stdin ! decodebin ! videoconvert ! timeoverlayparse ! videoconvert ! {le_sink} 2> {filename}.txt" &'
 
             h.cmd(le_cmd)
             debug(f'{h}  -  {le_cmd}')
@@ -397,16 +394,19 @@ for i in range(num_of_tries):
 
             if config['mode'] == 'gst':
                 sleep(2)
-
-                process_ids = subprocess.check_output(['xdotool', 'search', '--name', 'gst-launch']).decode().split()
-                for i, process_id in enumerate(process_ids):
-                    sleep(0.2)
-
-                    subprocess.call(['xdotool', 'windowmove', process_id, f'{i*max_resolution+50}', '0'])
+                try:
+                    output = subprocess.check_output(['xdotool', 'search', '--name', 'gst-launch'])
+                    process_ids = output.decode().split()
+                    for i, process_id in enumerate(process_ids):
+                        sleep(0.2)
+                        subprocess.call(['xdotool', 'windowmove', process_id, f'{i*max_resolution+50}', '0'])
+                except subprocess.CalledProcessError:
+                        print("No windows found with the name 'gst-launch'")
             else:
-                for i in range(len(subs)):
-                    sleep(0.2)
-                    subprocess.call(['xdotool', 'search', '--name', f'h{i}sub', 'windowmove', f'{i*max_resolution+50}', '0'])
+                if config['mode'] == 'ffmpeg':
+                    for i in range(len(subs)):
+                        sleep(0.2)
+                        subprocess.call(['xdotool', 'search', '--name', f'h{i}sub', 'windowmove', f'{i*max_resolution+50}', '0'])
 
 
 
@@ -482,10 +482,7 @@ for i in range(num_of_tries):
                             baseline = (sum(baseline_plus) / len(baseline_plus)) / 1e9 - (sum(baseline_minus) / len(baseline_minus)) / 1e9
 
 
-
             latencies = []
-
-
             def calculate_statistics(latencies):
                 average = np.mean(latencies)
                 median = np.median(latencies)
@@ -505,12 +502,21 @@ for i in range(num_of_tries):
                             file_latencies.append(latency)
                     if file_latencies:
                         average, median, percentile_99 = calculate_statistics(file_latencies)
-                        print(f">> average; median; percentile_99 timestampoverlay data: {average}; {median}; {percentile_99}")
-                        print(f">> subtracting based line: {average-based_line}")
-                        if gst_shark==2:
-                            print(f">> subtracting avarage interlatency: {average-baseline}")
-                        if gst_shark==1:
-                            print(f">> subtracting avarage proctimes: {average-baseline}")
+						with open(f"measurements/{current_time}_enddelays.txt", 'a') as enddelays_file:
+							enddelays_file.write(f"{filename}.txt\n")
+							enddelays_file.write(f">> average; median; percentile_99 timestampoverlay data: {average}; {median}; {percentile_99}\n")
+							enddelays_file.write(f">> subtracting based line: {average-based_line}\n")
+							if gst_shark == 2:
+								enddelays_file.write(f">> subtracting average interlatency: {average-baseline}\n")
+							if gst_shark == 1:
+								enddelays_file.write(f">> subtracting average proctimes: {average-baseline}\n")
+
+						print(f">> average; median; percentile_99 timestampoverlay data: {average}; {median}; {percentile_99}")
+						print(f">> subtracting based line: {average-based_line}")
+						if gst_shark == 2:
+							print(f">> subtracting average interlatency: {average-baseline}")
+						if gst_shark == 1:
+							print(f">> subtracting average proctimes: {average-baseline}")
 
 
 
