@@ -380,7 +380,7 @@ for i in range(num_of_tries):
                     if not video_on:
                         le_sink="fakesink"
 
-                    le_cmd=f'xterm  -hold  -T "{h.name}-sub-t" -e bash  -c "export GST_PLUGIN_PATH="${{PWD}}/../moq-gst/target/debug${{GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}}:${{PWD}}/../6gxr-latency-clock"; export RUST_LOG=debug; ./target/debug/moq-sub --name {track} https://{last_hop_relay[k][0]}:4443 | GST_DEBUG=timeoverlayparse:4 gst-launch-1.0 --no-position filesrc location=/dev/stdin ! decodebin ! videoconvert ! timeoverlayparse ! videoconvert ! {le_sink} 2> {filename}.txt" &'
+                    le_cmd=f'xterm  -hold  -T "{h.name}-sub-t" -e bash  -c "export GST_PLUGIN_PATH="${{PWD}}/../moq-gst/target/debug${{GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}}:${{PWD}}/../6gxr-latency-clock"; export RUST_LOG=info; ./target/debug/moq-sub --name {track} https://{last_hop_relay[k][0]}:4443 | GST_DEBUG=timeoverlayparse:4 gst-launch-1.0 --no-position filesrc location=/dev/stdin ! decodebin ! videoconvert ! timeoverlayparse ! videoconvert ! {le_sink} 2> {filename}.txt" &'
 
             h.cmd(le_cmd)
             debug(f'{h}  -  {le_cmd}')
@@ -502,21 +502,21 @@ for i in range(num_of_tries):
                             file_latencies.append(latency)
                     if file_latencies:
                         average, median, percentile_99 = calculate_statistics(file_latencies)
-						with open(f"measurements/{current_time}_enddelays.txt", 'a') as enddelays_file:
-							enddelays_file.write(f"{filename}.txt\n")
-							enddelays_file.write(f">> average; median; percentile_99 timestampoverlay data: {average}; {median}; {percentile_99}\n")
-							enddelays_file.write(f">> subtracting based line: {average-based_line}\n")
-							if gst_shark == 2:
-								enddelays_file.write(f">> subtracting average interlatency: {average-baseline}\n")
-							if gst_shark == 1:
-								enddelays_file.write(f">> subtracting average proctimes: {average-baseline}\n")
+                        with open(f"measurements/{current_time}_enddelays.txt", 'a') as enddelays_file:
+                            enddelays_file.write(f"{filename}.txt\n")
+                            enddelays_file.write(f">> average; median; percentile_99 timestampoverlay data: {average}; {median}; {percentile_99}\n")
+                            enddelays_file.write(f">> subtracting based line: {average-based_line}\n")
+                            if gst_shark == 2:
+                                enddelays_file.write(f">> subtracting average interlatency: {average-baseline}\n")
+                            if gst_shark == 1:
+                                enddelays_file.write(f">> subtracting average proctimes: {average-baseline}\n")
 
-						print(f">> average; median; percentile_99 timestampoverlay data: {average}; {median}; {percentile_99}")
-						print(f">> subtracting based line: {average-based_line}")
-						if gst_shark == 2:
-							print(f">> subtracting average interlatency: {average-baseline}")
-						if gst_shark == 1:
-							print(f">> subtracting average proctimes: {average-baseline}")
+                        print(f">> average; median; percentile_99 timestampoverlay data: {average}; {median}; {percentile_99}")
+                        print(f">> subtracting based line: {average-based_line}")
+                        if gst_shark == 2:
+                            print(f">> subtracting average interlatency: {average-baseline}")
+                        if gst_shark == 1:
+                            print(f">> subtracting average proctimes: {average-baseline}")
 
 
 
