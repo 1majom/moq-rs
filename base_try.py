@@ -114,7 +114,6 @@ def main():
     track = config['first_hop_relay'][0]['track']
     print(f"track: {track}")
     vidi_filenammm = track.split("_")[0]
-    print(f"vidi_filenammm: {vidi_filenammm}")
     baseline_pub.cmd(f'xterm -hold -T "Publisher" -e bash -c "export GST_PLUGIN_PATH="${{PWD}}/../moq-gst/target/debug${{GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}}:${{PWD}}/../6gxr-latency-clock"; gst-launch-1.0 -q -v -e filesrc location="./dev/{vidi_filenammm}.mp4"  ! qtdemux name=before01 \
   before01.video_0 ! h264parse name=before02 ! avdec_h264 name=before03 ! videoconvert name=before2 ! timestampoverlay name=middle ! videoconvert name=after1 ! x264enc tune=zerolatency name=after2 ! h264parse name=after3 ! isofmp4mux chunk-duration=1 fragment-duration=1 name=after4 ! moqsink tls-disable-verify=true url="https://12.0.1.2:4443" namespace="{track}";sleep 0.1 "&')
     sleep(0.5)

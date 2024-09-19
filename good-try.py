@@ -26,11 +26,11 @@ import subprocess
 
 my_debug = os.getenv("MY_DEBUG", False)
 all_gas_no_brakes= os.getenv("NO_BRAKES", False)
-video_on= os.getenv("LOOKY", False)
+video_on = os.getenv("LOOKY", False)
 forklift_certified = not os.getenv("NO_CERT", False)
 num_of_tries = int(os.getenv("NUMERO", 1))
 gst_shark = int(os.getenv("SHARK", 0))
-topofile= os.getenv("TOPO", "datasource/tiniest_topo.yaml")
+topofile= os.getenv("TOPO", "tiniest_topo.yaml")
 
 
 def info(msg):
@@ -64,6 +64,7 @@ for i in range(num_of_tries):
         baseline_file = datetime.datetime.now().strftime("assumedbaseline_%Y%m%d.txt")
         baseline_path = os.path.join('measurements', baseline_file)
         based_line=0.0
+        print(baseline_path)
 
         if os.path.exists(baseline_path):
             with open(baseline_path, 'r') as file:
@@ -91,7 +92,7 @@ for i in range(num_of_tries):
         net.staticArp()
 
         switch = net.addSwitch('s1',failMode='standalone')
-        with open(f"../cdn-optimization/{topofile}", 'r') as file:
+        with open(f"../cdn-optimization/datasource/{topofile}", 'r') as file:
             config = yaml.safe_load(file)
 
         relay_number = len(config['nodes'])
@@ -263,7 +264,7 @@ for i in range(num_of_tries):
             api.cmd('REDIS=10.2.0.99 ./dev/api --bind [::]:4442 &')
         else:
             if config['api']=="opti":
-                api.cmd(f'cd ../cdn-optimization; source env/bin/activate; TOPOFILE={topofile} python -m fastapi dev app/api.py --host 10.1.1.1 --port 4442 &')
+                api.cmd(f'cd ../cdn-optimization; source venv/bin/activate; TOPOFILE={topofile} python -m fastapi dev app/api.py --host 10.1.1.1 --port 4442 &')
 
             # else:
             #     api.cmd('REDIS=10.2.0.99 ./dev/api --topo-path topo.yaml --bind [::]:4442 &')
