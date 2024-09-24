@@ -23,14 +23,19 @@ import re
 import os
 import datetime
 import subprocess
+import json
 
 my_debug = os.getenv("MY_DEBUG", False)
-all_gas_no_brakes= os.getenv("NO_BRAKES", False)
+all_gas_no_brakes= not os.getenv("BRAKE", False)
 video_on = os.getenv("LOOKY", False)
 forklift_certified = not os.getenv("NO_CERT", False)
 num_of_tries = int(os.getenv("NUMERO", 1))
 gst_shark = int(os.getenv("SHARK", 0))
 topofile= os.getenv("TOPO", "tiniest_topo.yaml")
+# # gst mostly, clock, ffmpeg
+# mode= os.getenv("MODE", "clock")
+# # origi, opti
+# api= os.getenv("API", "origi")
 
 
 def info(msg):
@@ -48,7 +53,19 @@ if not os.geteuid() == 0:
     exit("** This script must be run as root")
 else:
    print("** Mopping up remaining mininet")
-for i in range(num_of_tries):
+topo_idx=0
+completely_unique_topos = [
+    "small_topo_p2s.yaml",
+    "small_topo_p2s.yaml",
+    "small_topo_ps.yaml",
+    "small_topo_ps.yaml",
+]
+completely_unique_api=["opti","origi","origi","opti"]
+if len(completely_unique_topos) != len(completely_unique_api):
+    print("The number of topologies and apis must be the same")
+    exit(1)
+for i in range(len(completely_unique_topos)):
+
     subprocess.call(['sudo', 'mn', '-c'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.call(['sudo', 'pkill', '-f','gst-launch'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -57,43 +74,39 @@ for i in range(num_of_tries):
         subprocess.run(['rm', 'target/debug/*'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.run(['sudo', '-u', 'szebala', '/home/szebala/.cargo/bin/cargo', 'build'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+    sleep(5)
+
+
 
     if __name__ == '__main__':
 
         setLogLevel( 'info' )
-        baseline_file = datetime.datetime.now().strftime("assumedbaseline_%Y%m%d.txt")
-        baseline_path = os.path.join('measurements', baseline_file)
+        current_time1 = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+        baseline_path = os.path.join('measurements', f"assumed_baseline_{current_time1}.txt")
         based_line=0.0
-        print(baseline_path)
 
-        if os.path.exists(baseline_path):
-            with open(baseline_path, 'r') as file:
-                baseline_content = file.read().strip()
+        subprocess.call(['sudo', 'python', 'base_try.py','--filename',f"{current_time1}"])
 
-            try:
-                based_line = float(baseline_content)
-
-            except ValueError:
-                # Start the base_try.py script
-                subprocess.call(['sudo', 'python', 'base_try.py'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                with open(baseline_path, 'r') as file:
-                    baseline_content = file.read().strip()
-                    based_line = float(baseline_content)
-        else:
-            # Start the base_try.py script
-            subprocess.call(['sudo', 'python', 'base_try.py'])
-
-            with open(baseline_path, 'r') as file:
-                baseline_content = file.read().strip()
-                based_line = float(baseline_content)
+        with open(baseline_path, 'r') as file:
+            baseline_content = file.read().strip()
+            based_line = float(baseline_content)
 
 
         net = Mininet( topo=None, waitConnected=True, link=partial(TCLink) )
         net.staticArp()
+        #https://github.com/bigswitch/mininet/blob/master/util/sysctl_addon
+
 
         switch = net.addSwitch('s1',failMode='standalone')
+        print(f"!!!!!!!!!!!!!!!!!!!!!!! Reading the topo file {topo_idx}")
+
+        topofile =completely_unique_topos[topo_idx]
+        print(f"!!!!!!!!!!!!!!!!!!!!!!! Reading the topo file {topofile}")
         with open(f"../cdn-optimization/datasource/{topofile}", 'r') as file:
             config = yaml.safe_load(file)
+
+        config['api'] = completely_unique_api[topo_idx]
+
 
         relay_number = len(config['nodes'])
 
@@ -208,7 +221,7 @@ for i in range(num_of_tries):
                     params1={'ip': ip1},
                     params2={'ip': ip2})
                 else:
-                    info(f"\n** this delay is put between {host1} {host2}")
+                    # info(f"\n** this delay is put between {host1} {host2}")
                     net.addLink(host1, host2, cls=TCLink, delay=f'{delay}ms',
                     params1={'ip': ip1},
                     params2={'ip': ip2})
@@ -242,7 +255,7 @@ for i in range(num_of_tries):
                 )
                 ip_counter += 1
 
-        current_time = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+        current_time = datetime.datetime.now().strftime("%m%d%H%M%S")
 
         net.start()
 
@@ -265,6 +278,7 @@ for i in range(num_of_tries):
         else:
             if config['api']=="opti":
                 api.cmd(f'cd ../cdn-optimization; source venv/bin/activate; TOPOFILE={topofile} python -m fastapi dev app/api.py --host 10.1.1.1 --port 4442 &')
+                sleep(2)
 
             # else:
             #     api.cmd('REDIS=10.2.0.99 ./dev/api --topo-path topo.yaml --bind [::]:4442 &')
@@ -325,12 +339,13 @@ for i in range(num_of_tries):
         max_resolution=300
 
         for (h,track) in pubs:
-            vidi_filenammm=track.split("_")[0]
+            vidi_filenammm=track.split("_")[1]
+
             track_duration = get_video_duration(f"./dev/{vidi_filenammm}.mp4")
             if track_duration > max_video_duration:
                 max_video_duration = track_duration
 
-            resolution=track.split("_")[0].split("-")[1]
+            resolution=track.split("_")[1].split("-")[1]
             if int(resolution)>max_resolution:
                 max_resolution=int(resolution)
 
@@ -354,17 +369,18 @@ for i in range(num_of_tries):
                             gst_shark_str+='export GST_TRACERS="interlatency";'
 
                         le_cmd=f'xterm {holder} -T "{h.name}-pub" -e bash -c "export GST_PLUGIN_PATH="${{PWD}}/../moq-gst/target/debug${{GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}}:${{PWD}}/../6gxr-latency-clock"; {gst_shark_str} gst-launch-1.0 -q -v -e filesrc location="./dev/{vidi_filenammm}.mp4"  ! qtdemux name=before01 \
-  before01.video_0 ! h264parse name=before02 ! avdec_h264 name=before03 ! videoconvert name=before2 ! timestampoverlay name=middle ! videoconvert name=after1 ! x264enc tune=zerolatency name=after2 ! h264parse name=after3 ! isofmp4mux chunk-duration=1 fragment-duration=1 name=after4 ! moqsink tls-disable-verify=true url="https://{first_hop_relay[k][0]}:4443" namespace="{track}" 2> measurements/baseline_{track}_{current_time}_{h.name}.txt ; sleep 3 "&'
+                        before01.video_0 ! h264parse config-interval=-1 name=before02 ! avdec_h264 name=before03 ! videoconvert name=before2 ! timestampoverlay name=middle ! videoconvert name=after1 ! x264enc tune=zerolatency name=after2 ! h264parse name=after3 ! isofmp4mux chunk-duration=1 fragment-duration=1 name=after4 ! moqsink tls-disable-verify=true url="https://{first_hop_relay[k][0]}:4443" namespace="{track}" 2> measurements/baseline_{track}_{current_time}_{h.name}.txt ; sleep 3 "&'
 
             debug(f'{h}  -  {le_cmd}')
             debug(f'{h}  -  {first_hop_relay[k][0]}')
+            # if not my_debug:
             h.cmd(le_cmd)
-            sleep(0.2)
+            sleep(0.7)
             k+=1
 
         # if this is 1.5 or more it will cause problems
         # around 0.7 needed
-        sleep(0.7)
+        sleep(5)
 
 
         k=0
@@ -377,16 +393,21 @@ for i in range(num_of_tries):
                   f' --tls-disable-verify | ffplay -window_title \'{h.name}sub\' -x 360 -y 200 - "&')
                 else:
                     filename = f"measurements/{track}_{current_time}_{h.name}"
+                    errorfile1=f"measurements/{track}_{current_time}_{h.name}_iferror"
+                    errorfile2=f"measurements/{track}_{current_time}_{h.name}_iferror2"
                     le_sink="autovideosink"
                     if not video_on:
                         le_sink="fakesink"
 
-                    le_cmd=f'xterm  -hold  -T "{h.name}-sub-t" -e bash  -c "export GST_PLUGIN_PATH="${{PWD}}/../moq-gst/target/debug${{GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}}:${{PWD}}/../6gxr-latency-clock"; export RUST_LOG=info; ./target/debug/moq-sub --name {track} https://{last_hop_relay[k][0]}:4443 | GST_DEBUG=timeoverlayparse:4 gst-launch-1.0 --no-position filesrc location=/dev/stdin ! decodebin ! videoconvert ! timeoverlayparse ! videoconvert ! {le_sink} 2> {filename}.txt" &'
+                    le_cmd=f'xterm  -hold  -T "{h.name}-sub-t" -e bash  -c "export GST_PLUGIN_PATH="${{PWD}}/../moq-gst/target/debug${{GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}}:${{PWD}}/../6gxr-latency-clock"; export RUST_LOG=info; ./target/debug/moq-sub --name {track} https://{last_hop_relay[k][0]}:4443 2> {errorfile1}.txt | GST_DEBUG=timeoverlayparse:4 gst-launch-1.0 --no-position filesrc location=/dev/stdin ! decodebin ! videoconvert ! timeoverlayparse ! videoconvert ! {le_sink} 2> {filename}.txt | tee {errorfile2}.txt" &'
 
-            h.cmd(le_cmd)
+
+            if not my_debug:
+                h.cmd(le_cmd)
+
             debug(f'{h}  -  {le_cmd}')
             debug(f'{h}  -  {last_hop_relay[k][0]}')
-            sleep(0.2)
+            sleep(0.8)
             k+=1
 
         sleep(1)
@@ -411,7 +432,7 @@ for i in range(num_of_tries):
 
 
 
-        if all_gas_no_brakes:
+        if all_gas_no_brakes and not my_debug:
             sleep(max_video_duration+3)
         else:
             CLI( net )
@@ -426,11 +447,81 @@ for i in range(num_of_tries):
                 h.cmd('pkill -f gst-launch')
             h.cmd('pkill -f xterm')
 
+
+        all_network_receive_bytes = 0
+        all_network_receive_packets = 0
+        all_network_transmit_bytes = 0
+        all_network_transmit_packets = 0
+        for host in net.hosts:
+            # TODO this now is be more optimal but should be checked
+            if host.name != 'h999':
+                # we need to exec this, because otherwise all of the outputs after starting the host will be displayed for the following command
+                host.cmd("echo clean")
+                interfaces = host.cmd('ip -br a').strip().split('\n')
+                interface_names = []
+                for line in interfaces:
+                    parts = line.split()
+                    interface_name = parts[0].split('@')[0]
+                    ip_address = parts[2] if len(parts) > 2 else ''
+                    if '10.1.1.' not in ip_address:
+                        interface_names.append(interface_name)
+                net_dev_output = host.cmd('cat /proc/net/dev').strip().split('\n')
+                for line in net_dev_output:
+                    if any(interface_name in line for interface_name in interface_names):
+                        stats = line.split(':')[1].split()
+                        all_network_receive_bytes += int(stats[0])
+                        all_network_receive_packets += int(stats[1])
+                        all_network_transmit_bytes += int(stats[8])
+                        all_network_transmit_packets += int(stats[9])
+
+        if config['api'] == 'origi':
+            for first_hop_relay in config['first_hop_relay']:
+                first_hop_track = first_hop_relay['track']
+                relevant_last_hop_relays = [item['relayid'] for item in config['last_hop_relay'] if item['track'] == first_hop_track]
+                sum_cost = 0
+                for relayid in relevant_last_hop_relays:
+                    for edge in config['edges']:
+                        if (edge['node1'] == first_hop_relay['relayid'] and edge['node2'] == relayid) or \
+                           (edge['node1'] == relayid and edge['node2'] == first_hop_relay['relayid']):
+                            sum_cost += edge['attributes']['cost']
+        else:
+            if config['api'] == 'opti':
+                sum_cost = 0
+                for first_hop_relay in config['first_hop_relay']:
+                    first_hop_track = first_hop_relay['track']
+                    api.cmd('echo clean')
+                    response = api.cmd(f'curl -s http://10.1.1.1:4442/tracks/{first_hop_track}/topology')
+                    response_lines = response.strip().split('\n')
+                    sanitized_response_lines = [line for line in response_lines if line.startswith('{')][0].strip('(venv)')
+                    print(sanitized_response_lines)
+                    if len(response_lines) > 1:
+                        response_json = json.loads(sanitized_response_lines)
+                        sum_cost += float(response_json.get('cost', 0))
+                    else:
+                        sum_cost += 0
+
+
         net.stop()
+
+        for (h,track) in subs:
+            filename = f"measurements/{track}_{current_time}_{h.name}"
+
+            with open(f"{filename}.txt", 'r') as file:
+                        lines = file.readlines()
+                        csv_lines = ["Latency,Frame-id\n"]
+                        for line in lines:
+                            latency_match = re.search(r'Latency: (\d+)', line)
+                            frame_id_match = re.search(r'Frame-id: (\d+)', line)
+                            if latency_match and frame_id_match:
+                                latency = latency_match.group(1)
+                                frame_id = frame_id_match.group(1)
+                                csv_lines.append(f"{latency},{frame_id}\n")
+
+            with open(f"{filename}_cleaned.txt", 'w') as file:
+                file.writelines(csv_lines)
+
         if (config['mode'] == 'gst'):
-            folder_path='measurements'
-            list_of_files = [file for file in glob.glob(os.path.join(folder_path, '*')) if not file.startswith('measurements/baseline')]
-            latest_files = sorted(list_of_files, key=os.path.getctime, reverse=True)[:len(subs)]
+
             if gst_shark>0:
                 print("latest_files: ", latest_files)
                 baseline_files = glob.glob(os.path.join(folder_path, 'baseline*'))
@@ -490,36 +581,62 @@ for i in range(num_of_tries):
                 percentile_99 = np.percentile(latencies, 99)
                 return average/1e9, median/1e9, percentile_99/1e9
             def extract_latency(line):
-                match = re.search(r'Latency: (\d+)', line)
+                match = re.search(r'(\d+),', line)
                 if match:
                     return int(match.group(1))
                 return None
-            for file_path in latest_files:
-                with open(file_path, 'r') as file:
-                    file_latencies = []
-                    for line in file:
-                        latency = extract_latency(line)
-                        if latency is not None:
-                            file_latencies.append(latency)
-                    if file_latencies:
-                        average, median, percentile_99 = calculate_statistics(file_latencies)
-                        with open(f"measurements/{current_time}_enddelays.txt", 'a') as enddelays_file:
-                            enddelays_file.write(f"{filename}.txt\n")
-                            enddelays_file.write(f">> average; median; percentile_99 timestampoverlay data: {average}; {median}; {percentile_99}\n")
-                            enddelays_file.write(f">> subtracting based line: {average-based_line}\n")
+            summing_current_time = datetime.datetime.now().strftime("%m%d%H")
+
+            with open(f"measurements/{summing_current_time}_enddelays.txt", 'a') as enddelays_file:
+                header=f"\n{config['api']}-{topofile}\nfilepath;average timestampoverlay data; baseline; avarage-baseline; number of frames; didwarn; ending time"
+                enddelays_file.write(f"{header}")
+                print(f"{header}")
+                for (h,track) in subs:
+                    file_path = f"measurements/{track}_{current_time}_{h.name}"
+                    with open(f"{file_path}_cleaned.txt", 'r') as file:
+                        file_latencies = []
+                        count=0
+                        last_frame=1
+
+                        for line in file:
+                            latency = extract_latency(line)
+                            if latency is not None:
+                                file_latencies.append(latency)
+                                count+=1
+                                last_frame=line.split(",")[1]
+                        if file_latencies:
+                            average, median, percentile_99 = calculate_statistics(file_latencies)
+                            did_it_warn=False
+                            ending_time=None
+                            error_filename = f"{file_path}_iferror.txt"
+                            with open(error_filename, 'r') as error_file:
+                                for line in error_file:
+                                    if 'WARN' in line:
+                                        did_it_warn=True
+                            error_filename2 = f"{file_path}_iferror2.txt"
+                            with open(error_filename2, 'r') as error_file2:
+                                for line2 in error_file2:
+                                    match = re.search(r'Execution ended after ([0-9:.]+)', line2)
+                                    if match:
+                                        ending_time = match.group(1)
+                                        break
+                            actual_line=f"\n{file_path};{average};{based_line};{average-based_line};{count};{did_it_warn};{ending_time}"
+                            enddelays_file.write(f"{actual_line}")
+                            print(f"{actual_line}")
                             if gst_shark == 2:
                                 enddelays_file.write(f">> subtracting average interlatency: {average-baseline}\n")
                             if gst_shark == 1:
                                 enddelays_file.write(f">> subtracting average proctimes: {average-baseline}\n")
-
-                        print(f">> average; median; percentile_99 timestampoverlay data: {average}; {median}; {percentile_99}")
-                        print(f">> subtracting based line: {average-based_line}")
                         if gst_shark == 2:
                             print(f">> subtracting average interlatency: {average-baseline}")
                         if gst_shark == 1:
                             print(f">> subtracting average proctimes: {average-baseline}")
 
 
+                actual_line=f"\nFor this instance RX packets; RX bytes; TX packets; TX bytes; sum cost:\n{all_network_receive_packets};{all_network_receive_bytes};{all_network_transmit_packets};{all_network_transmit_bytes};{sum_cost}\n"
+                print(actual_line)
+                enddelays_file.write(actual_line)
 
+        topo_idx+=1
 
 
