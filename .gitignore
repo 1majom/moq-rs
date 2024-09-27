@@ -5,14 +5,8 @@ logs/
 .vscode/*
 topo.yaml
 __pycache__/*
-*.pcap
-*.pcapng
 pcaps/*
 ssl/*
-topo.yaml
 Cargo.lock
 topo copy 2.yaml
 measurements/
-test-gcp-type-beat.json
-dev/cert2
-topo.json
