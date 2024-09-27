@@ -10,3 +10,4 @@ ssl/*
 Cargo.lock
 topo copy 2.yaml
 measurements/
+vmstart_output.txt
