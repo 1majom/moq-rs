@@ -11,3 +11,4 @@ Cargo.lock
 topo copy 2.yaml
 measurements/
 the_path.py
+vmstart_output.txt
