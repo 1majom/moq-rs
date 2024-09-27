@@ -1,33 +1,66 @@
 
 ### About this branch
 
-This branch is the combinantion of the mininet_try- and api_topology_try the main goal was to provide the same full mesh network with mininet
-while introducing delays on specific links. The api's topology forcing rules are also working as in the later mentioned branch. 
-Still the dynamic changing of this topology is not implemented.
-The py file to start this simulation is good_try.py
+This project tries to put the very well written Media over QUIC implementation, moq-rs into a custom topology inside mininet.
+The project is closely connected to [Zotyamester/cdn-optimizer](https://github.com/Zotyamester/cdn-optimization) (later referenced as cdn-opti) which can be used as an alternative api instead of the moq-api provided by the original project. The main difference between these that with moq-api the subscriber's relay will always get the publisher's relay without any inbetween relays, only using one link from our relay mesh network. The cdn-opti instead will use the provided costs to calculate a more optimal route while using more then 1 links.
 
-The original contents of the README.md can be found bellow the line.
+For the whole project to work on a fresh **Ubuntu 22.04** machine the vm_start.sh file should be downloaded alone and ran in the folder where we want to see the moq-rs and other projects folders. - this is wip
+
+Right now (this is also wip) to start the good_try.py mininet script we need a topology file. Now these topology files are gotten from the cdn-opti repo which should be cloned next to this one so it can be reached.
+
+Here is a sample topology file:
+```
+
+api: "opti" 
+mode: "gst" 
+first_hop_relay:
+  - relayid: "node1"
+    track: "bbb-720_1000"
+last_hop_relay:
+  - relayid: "node2"
+    track: "bbb-720_1000"
+
+nodes:
+  - name: "node1"
+    location:
+      - 40.7128
+      - -74.0060
+  - name: "node2"
+    location:
+      - 37.7749
+      - -122.4194
+
+edges:
+  - node1: "node1"
+    node2: "node2"
+    attributes:
+      latency: 0
+      cost: 0.01
+
+```
+- the api can be opti, which is the cdn-opti or origi, which will use the moq-api the mode should be gst this 
+way we will get the latency information about the participating clients. other options are: 'clock' which will 
+use the moq-clock applicaton as clients, or 'ffmpeg' which simply starts the stream while displaying the video
+
+- nodes: we can define the relays
+
+- edges: are the connections between the relays. the provided latency will be applied to the mininet topology, and the cost will be used by the cdn-opti api.
+
+- in the following list we can provide the publishers by specifing their starting relay and the track name that they will use
+
+- it is important that the trackname should follow the following nameing convention: 
+  - {id, with one publisher it is not needed}\_{the filename of the wanted video w/o .mp4}\_{the bost budget that the cdn-opti should use}
+
+- filename provided by downloading the videofiles (the first few are converted to that resolution, the latter ones are cut to 30secs) from the vm_start.sh:
+
+  - bbb-{720|480|360|720-30|480-30|360-30}
+
+- its important that each relay can only have 1 publisher/subsciber
 
 
-A topo.yaml file is need for the good_try.py to work. There an example in topo-def.yaml.
-- origi_api: 	
-    - if true moq-api will always give back the publisher's relay when a relay with a subscriber is searching for a track.
-    - else it will try to use the default "edges" between relays.
-- edges, nodes: these are lists of the relays. the number here will be used as the ip on the loopback interface of the relay as in 10.3.0.x/24 x is the number in the latter mentioned lists
-- first_hop_relay:
-  - a list of relayid and track fields. the relay id should be the relay where we want a publisher to connect. the track is the namespace of that publisher and rightnow also the filename of the wanted .mp4 file
-- last_hop_relay:
-  - the same as first_hop_relay but it's for the subscribers
-- mode:
-  - ffmpeg: the clients will use moq-pub and moq-sub binaries with ffmpeg and ffplay. the binaries can be builf from this repo
-  - clock: the clients will use moq-clock on both ends. the receiving client will give back the seconds passed from the sender sending the timestamp
-  - gst: wip
-    - a bit complicated:
-    - next to this repo 
-      - the 55895e86eddc04584ca042ad287bbd18d5a1bcac commit of moq-gst should be provided
-      - the f629e06991425a7e250bb3a771fa9c211cde0c08 commit of [latency clock](https://github.com/SNS-JU/6gxr-latency-clock.git) should be provided
-    - it might only work with gstreamer 1.22
-    - this mode will not stream a video in a looped way
+All used topology files can be found in cdn-opti repo under the datasources folder
+
+Bellow we can see the original readme of the moq-rs project.
 
 
 ***
