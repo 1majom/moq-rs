@@ -24,6 +24,7 @@ import os
 import datetime
 import subprocess
 import json
+import the_path
 
 my_debug = os.getenv("MY_DEBUG", False)
 all_gas_no_brakes= not os.getenv("BRAKE", False)
@@ -135,8 +136,8 @@ for i in range(len(completely_unique_topos)):
         with open('./dev/cert2', 'w') as file:
             file.writelines(cert_content)
         env = os.environ.copy()
-        env['PATH'] = '/usr/local/go:/usr/local/go/bin:' + env['PATH']
-        subprocess.call(['./dev/cert2'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        env['PATH'] =  env['PATH'] +the_path.PATH_GO
+        subprocess.call(['./dev/cert2'], env=env)
 
         """ the different networks are:
         - 10.0.x.0/24 - relay to relay connections where x is a counter
