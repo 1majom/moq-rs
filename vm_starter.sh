@@ -64,6 +64,7 @@ git checkout f629e06991425a7e250bb3a771fa9c211cde0c08
 make
 cd ..
 git clone https://github.com/Zotyamester/cdn-optimization
+cd cdn-optimization
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
