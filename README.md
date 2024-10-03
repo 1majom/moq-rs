@@ -4,7 +4,7 @@
 This project tries to put the very well written Media over QUIC implementation, moq-rs into a custom topology inside mininet.
 The project is closely connected to [Zotyamester/cdn-optimizer](https://github.com/Zotyamester/cdn-optimization) (later referenced as cdn-opti) which can be used as an alternative api instead of the moq-api provided by the original project. The main difference between these that with moq-api the subscriber's relay will always get the publisher's relay without any inbetween relays, only using one link from our relay mesh network. The cdn-opti instead will use the provided costs to calculate a more optimal route while using more then 1 links.
 
-For the whole project to work on a fresh **Ubuntu 22.04** machine the vm_start.sh file should be downloaded alone and ran in the folder where we want to see the moq-rs and other projects folders. - this is wip
+For the whole project to work on a fresh **Ubuntu 22.04** machine the vm_start.sh file should be downloaded alone and ran in the folder where we want to see the moq-rs and other projects folders. Also a the_path.py file is needed to be created inside that we only need a variable called PATH_GO which tells the exact path to the go binary. And also a venv variable which is all is correctly set up should be the command activeting the venv under the venv folder. - this is wip
 
 Right now (this is also wip) to start the good_try.py mininet script we need a topology file. Now these topology files are gotten from the cdn-opti repo which should be cloned next to this one so it can be reached.
 

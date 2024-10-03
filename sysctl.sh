@@ -1,5 +1,5 @@
 #!/bin/bash
-# Apply sysctl configurations using a bash script
+#https://github.com/bigswitch/mininet/blob/master/util/sysctl_addon
 
 sysctl_configs=(
 	"fs.file-max=100000"
@@ -21,3 +21,6 @@ done
 # Apply multi-value sysctl configurations separately
 echo "10240 87380 16777216" | sudo tee /proc/sys/net/ipv4/tcp_rmem
 echo "10240 87380 16777216" | sudo tee /proc/sys/net/ipv4/tcp_wmem
+
+echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor performance
+

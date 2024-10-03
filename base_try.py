@@ -22,7 +22,9 @@ import the_path
 
 
 #!/usr/bin/env python
-tls_verify = os.getenv("TLS_VERIFY", True)
+clocked = os.getenv("CLOCKED", False)
+tls_verify = not os.getenv("NO_CERT", False)
+
 
 def calculate_statistics(latencies):
     average = np.mean(latencies)
@@ -36,16 +38,19 @@ def extract_latency(line):
         return int(match.group(1))
     return None
 
-def debug(msg):
-    if my_debug:
-        log.info(msg + '\n')
+
 
 def main():
     parser = argparse.ArgumentParser(description='Process some integers.')
     parser.add_argument('--filename', type=str, required=True, help='Filename for the output without .txt')
+    parser.add_argument('--clock', action='store_true', help='Use clocked')
+    parser.add_argument('--tls-verify', action='store_true', help='Use tls_verify') 
+    parser.add_argument('--track', type=str, required=True, help='Track name')
     args = parser.parse_args()
-
-    setLogLevel('info')
+    clocked = args.clock
+    tls_verify = args.tls_verify
+    
+    setLogLevel('critical')
     template_for_relays = (
         'RUST_LOG=debug RUST_BACKTRACE=0 '
         './target/debug/moq-relay --bind \'{bind}\' --api {api} --node \'{node}\' '
@@ -53,10 +58,6 @@ def main():
         ' {tls_verify} --dev {origi} &'
     )
 
-    with open("../cdn-optimization/datasource/baselining_topo.yaml", 'r') as file:
-        config = yaml.safe_load(file)
-
-    print("** Baking fresh cert")
     ip_string = ' '.join(['12.0.1.2 12.0.1.1 12.0.2.2 12.0.2.1'])
     with open('./dev/cert', 'r') as file:
         cert_content = file.readlines()
@@ -65,11 +66,13 @@ def main():
         file.writelines(cert_content)
     env = os.environ.copy()
     env['PATH'] =  env['PATH'] +the_path.PATH_GO
-    subprocess.call(['./dev/cert2'], env=env)
+    subprocess.call(['./dev/cert2'], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     tls_verify_str = ""
+    tls_verify_gst_str=""
     if not tls_verify:
         tls_verify_str = "--tls-disable-verify"
+        tls_verify_gst_str= "tls-disable-verify=true"
 
     filename = args.filename
     assumed_baseline = 0
@@ -114,35 +117,56 @@ def main():
     ))
     sleep(1)
     # CLI(net)
-    # Start the publisher on one host
-    track = config['first_hop_relay'][0]['track']
-    print(f"track: {track}")
-    vidi_filenammm = track.split("_")[0]
-    baseline_pub.cmd(f'xterm -hold -T "baseline-pub" -e bash -c "export GST_PLUGIN_PATH="${{PWD}}/../moq-gst/target/debug${{GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}}:${{PWD}}/../6gxr-latency-clock"; gst-launch-1.0 -q -v -e filesrc location="./dev/{vidi_filenammm}.mp4"  ! qtdemux name=before01 \
-  before01.video_0 ! h264parse name=before02 ! avdec_h264 name=before03 ! videoconvert name=before2 ! timestampoverlay name=middle ! videoconvert name=after1 ! x264enc tune=zerolatency name=after2 ! h264parse name=after3 ! isofmp4mux chunk-duration=1 fragment-duration=1 name=after4 ! moqsink tls-disable-verify=true url="https://12.0.1.2:4443" namespace="{track}";sleep 0.1 "&')
-    sleep(0.5)
-    baseline_sub.cmd(f'xterm -hold -T "baseline-sub" -e bash -c "export GST_PLUGIN_PATH="${{PWD}}/../moq-gst/target/debug${{GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}}:${{PWD}}/../6gxr-latency-clock"; export RST_LOG=debug; ./target/debug/moq-sub --name {track} https://12.0.1.2:4443 | GST_DEBUG=timeoverlayparse:4 gst-launch-1.0 --no-position filesrc location=/dev/stdin ! decodebin ! videoconvert ! timeoverlayparse ! videoconvert ! fakesink 2> measurements/assumed_baseline_pre_{filename}.txt" &')
-    sleep(10)
-    print([file for file in glob.glob(os.path.join('measurements', '*')) if file.startswith('measurements/assumed_baseline_pre_')])
-    lat = sorted([file for file in glob.glob(os.path.join('measurements', '*')) if file.startswith('measurements/assumed_baseline_pre_')], key=os.path.getctime, reverse=True)[0]
-    print(lat)
+    track = args.track
+    if not clocked:
+        vidi_filenammm = track.split("_")[1]
+        baseline_pub.cmd(f'xterm -hold -T "baseline-pub" -e bash -c "export GST_PLUGIN_PATH="${{PWD}}/../moq-gst/target/debug${{GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}}:${{PWD}}/../6gxr-latency-clock"; gst-launch-1.0 -q -v -e filesrc location="./dev/{vidi_filenammm}.mp4"  ! qtdemux name=before01 \
+    before01.video_0 ! h264parse name=before02 ! avdec_h264 name=before03 ! videoconvert name=before2 ! timestampoverlay name=middle ! videoconvert name=after1 ! x264enc tune=zerolatency name=after2 ! h264parse name=after3 ! isofmp4mux chunk-duration=1 fragment-duration=1 name=after4 ! moqsink {tls_verify_gst_str} url="https://12.0.1.2:4443" namespace="{track}";sleep 0.1 "&')
+        sleep(0.5)
+        baseline_sub.cmd(f'xterm -hold -T "baseline-sub" -e bash -c "export GST_PLUGIN_PATH="${{PWD}}/../moq-gst/target/debug${{GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}}:${{PWD}}/../6gxr-latency-clock"; export RST_LOG=debug; ./target/debug/moq-sub --name {track} https://12.0.1.2:4443 | GST_DEBUG=timeoverlayparse:4 gst-launch-1.0 --no-position filesrc location=/dev/stdin ! decodebin ! videoconvert ! timeoverlayparse ! videoconvert ! fakesink 2> measurements/assumed_baseline_pre_{filename}.txt" &')
+        sleep(30) # should match with the normal measure
+        subprocess.call(['sudo', 'pkill', '-f', 'xterm'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    with open(lat, 'r') as file:
-        file_latencies = []
-        for line in file:
-            latency = extract_latency(line)
-            if latency is not None:
-                file_latencies.append(latency)
-        if file_latencies:
-            average, median, percentile_99 = calculate_statistics(file_latencies)
-            print(f"assumed baseline:{average}")
-            assumed_baseline = average
-            baseline_file = f"measurements/assumed_baseline_{filename}.txt"
-            with open(baseline_file, 'w') as file:
-                file.write(str(assumed_baseline))
+        lat =  f"measurements/assumed_baseline_pre_{filename}.txt"
 
+        with open(lat, 'r') as file:
+            file_latencies = []
+            for line in file:
+                latency = extract_latency(line)
+                if latency is not None:
+                    file_latencies.append(latency)
+            if file_latencies:
+                average, median, percentile_99 = calculate_statistics(file_latencies)
+                assumed_baseline = average
+                baseline_file = f"measurements/assumed_baseline_{filename}.txt"
+                with open(baseline_file, 'w') as file:
+                    file.write(str(assumed_baseline))
+                print(f"*** assumed baseline: {assumed_baseline}")
+
+
+    else:
+        baseline_pub.cmd(f'xterm -hold  -T "baseline-pub" -e bash -c "RUST_LOG=info ./target/debug/moq-clock --publish --namespace {track} https://12.0.1.2:4443" &')
+        sleep(0.5)
+        baseline_sub.cmd(f'xterm -hold  -T "baselin-sub" -e bash -c "RUST_LOG=info ./target/debug/moq-clock --namespace {track} https://12.0.1.2:4443 {tls_verify_str} >> measurements/assumed_baseline_clock_pre_{filename}.txt" &')
+        sleep(30)
+        subprocess.call(['sudo', 'pkill', '-f', 'xterm'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        file_path1 = f"measurements/assumed_baseline_clock_pre_{filename}.txt"
+        with open(file_path1, 'r') as file:
+            file_latencies = []
+            for line in file:
+                try:
+                    latency = int(line.strip()) * 1000000
+                    file_latencies.append(latency)
+                except ValueError:
+                    continue
+            if file_latencies:
+                assumed_baseline, median, percentile_99 = calculate_statistics(file_latencies)
+                print(f"*** assumed baseline (clocked): {assumed_baseline}")
+                baseline_file = f"measurements/assumed_baseline_{filename}.txt"
+                with open(baseline_file, 'w') as file:
+                    file.write(str(assumed_baseline))
     net.stop()
-    print(f"assumed baseline: {assumed_baseline}")
+    
     subprocess.call(['sudo', 'pkill', '-f', 'xterm'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 

@@ -35,9 +35,7 @@ gst_shark = int(os.getenv("SHARK", 0))
 topofile= os.getenv("TOPO", "tiniest_topo.yaml")
 folding= os.getenv("BUILD", False)
 # # gst mostly, clock, ffmpeg
-# mode= os.getenv("MODE", "clock")
-# # origi, opti
-# api= os.getenv("API", "origi")
+mode = os.getenv("MODE", "clock")
 
 
 def info(msg):
@@ -67,37 +65,48 @@ if not os.geteuid() == 0:
     exit("** This script must be run as root")
 else:
    print("** Mopping up remaining mininet")
-topo_idx=0
-test_set=[
-    # ("small_topo_p2s.yaml","origi"),
-    # ("small_topo_p2s.yaml","opti"),
-    # ("small_topo_ps.yaml","origi"),
-    # ("small_topo_ps.yaml","opti"),
-    ("small_topo_ps.yaml","origi"),
-]
-for i in range(num_of_tries):
-    for i in range(len(test_set)):
+
+if not os.path.exists('the_path.py'):
+    exit("** the_path module is not available")
+
+test_set=the_path.test_set
+
+for topo_idx in range(len(test_set)):
+    for try_idx in range(num_of_tries):
 
         subprocess.call(['sudo', 'mn', '-c'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.call(['sudo', 'pkill', '-f','gst-launch'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-        print("** Folding them needed binaries")
         if my_debug or folding:
+            print("** Folding them needed binaries")
             subprocess.run(['rm', 'target/debug/*'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        subprocess.run(['sudo', '-u', 'szebala', '/home/szebala/.cargo/bin/cargo', 'build'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(['sudo', '-u', the_path.user, the_path.cargopath, 'build'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         sleep(5)
 
-
-
         if __name__ == '__main__':
 
-            setLogLevel( 'info' )
+            if my_debug:
+                setLogLevel( 'info' )
+            else:
+                setLogLevel( 'critical' )
             current_time1 = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
             baseline_path = os.path.join('measurements', f"assumed_baseline_{current_time1}.txt")
             based_line=0.0
+            baseline_clk_str=""
+            baseline_tls_str=""
 
-            subprocess.call(['sudo', 'python', 'base_try.py','--filename',f"{current_time1}"])
+            topofile = test_set[topo_idx][0]
+            with open(f"../cdn-optimization/datasource/{topofile}", 'r') as file:
+                config = yaml.safe_load(file)
+            config['mode'] = test_set[topo_idx][2] if len(test_set[topo_idx]) > 2 else mode
+            print(f"** Sorting out the config {topofile} with {config['mode']} and {config['api']}")
+
+            if config['mode'] == 'clock':
+                baseline_clk_str="--clock"
+            if forklift_certified:
+                baseline_tls_str="--tls-verify"
+            subprocess.call(['sudo', 'python', 'base_try.py', '--filename', f"{current_time1}",'--track',f"{config['first_hop_relay'][0]['track']}"] + ([baseline_clk_str] if baseline_clk_str else []) + ([baseline_tls_str] if baseline_tls_str else []))
 
             with open(baseline_path, 'r') as file:
                 baseline_content = file.read().strip()
@@ -106,24 +115,15 @@ for i in range(num_of_tries):
 
             net = Mininet( topo=None, waitConnected=True, link=partial(TCLink) )
             net.staticArp()
-            #https://github.com/bigswitch/mininet/blob/master/util/sysctl_addon
 
 
             switch = net.addSwitch('s1',failMode='standalone')
-            print(f"!!!!!!!!!!!!!!!!!!!!!!! Reading the topo file {topo_idx}")
 
-            topofile = test_set[topo_idx][0]
-            print(f"!!!!!!!!!!!!!!!!!!!!!!! Reading the topo file {topofile}")
-            with open(f"../cdn-optimization/datasource/{topofile}", 'r') as file:
-                config = yaml.safe_load(file)
 
             config['api'] = test_set[topo_idx][1]
-            config['mode'] = 'clock'
-
             relay_number = len(config['nodes'])
 
 
-            print("** Sorting out the config")
             node_names = [item['name'] for item in config['nodes']]
             edges = config['edges']
             connections = []
@@ -139,7 +139,7 @@ for i in range(num_of_tries):
             edges = connections
 
 
-            print("** Baking fresh cert")
+            # print("** Baking fresh cert")
             ip_string = ' '.join([f'10.3.0.{i}' for i in range(1, relay_number+1)])
             with open('./dev/cert', 'r') as file:
                 cert_content = file.readlines()
@@ -193,7 +193,7 @@ for i in range(num_of_tries):
                 k += 1
 
 
-            # ** Setting up full mesh network
+            # *** Setting up full mesh network
             network_counter = 0
             delay=None
             # *** connecting pubs and subs
@@ -233,7 +233,6 @@ for i in range(num_of_tries):
                         params1={'ip': ip1},
                         params2={'ip': ip2})
                     else:
-                        # info(f"\n** this delay is put between {host1} {host2}")
                         net.addLink(host1, host2, cls=TCLink, delay=f'{delay}ms',
                         params1={'ip': ip1},
                         params2={'ip': ip2})
@@ -289,28 +288,18 @@ for i in range(num_of_tries):
                 api.cmd('REDIS=10.2.0.99 ./dev/api --bind [::]:4442 &')
             else:
                 if config['api']=="opti":
-                    api.cmd(f'cd ../cdn-optimization; source venv/bin/activate; TOPOFILE={topofile} python -m fastapi dev app/api.py --host 10.1.1.1 --port 4442 &')
-                    sleep(2)
-
-                # else:
-                #     api.cmd('REDIS=10.2.0.99 ./dev/api --topo-path topo.yaml --bind [::]:4442 &')
-                #     template_for_relays = (
-                #         'RUST_LOG=debug RUST_BACKTRACE=0 '
-                #         './target/debug/moq-relay --bind \'{bind}\' --api {api} --node \'{node}\' '
-                #         '--tls-cert ./dev/localhost.crt --tls-key ./dev/localhost.key '
-                #         '--tls-disable-verify --dev &'
-                #     )
+                    api.cmd(f'cd ../cdn-optimization;{the_path.venv} TOPOFILE={topofile} python -m fastapi dev app/api.py --host 10.1.1.1 --port 4442 &')
 
             # for some reason this is needed or the first relay wont reach the api
             # (ffmpeg needs the 1s, gst can work with less)
-            sleep(2)
+            sleep(4)
 
-            host_counter = 1
 
             tls_verify_str = ""
             if not forklift_certified:
                 tls_verify_str = "--tls-disable-verify"
 
+            host_counter = 1
             for h in relays:
                 ip_address = f'10.3.0.{host_counter}'
                 debug(f'Starting relay on {h} - {ip_address}')
@@ -330,8 +319,6 @@ for i in range(num_of_tries):
                     node=f'https://{ip_address}:4443',
                     tls_verify=tls_verify_str,
                     origi=origi_api_str
-
-
                 ))
 
                 host_counter += 1
@@ -491,6 +478,9 @@ for i in range(num_of_tries):
                         if '10.1.1.' not in ip_address:
                             interface_names.append(interface_name)
                     net_dev_output = host.cmd('cat /proc/net/dev').strip().split('\n')
+                    with open(f"measurements/{current_time}_{host.name}_network.txt", 'w') as file:
+                        file.write('\n'.join(net_dev_output))
+                        file.write('\n'.join(interfaces))
                     for line in net_dev_output:
                         if any(interface_name in line for interface_name in interface_names):
                             stats = line.split(':')[1].split()
@@ -539,7 +529,6 @@ for i in range(num_of_tries):
                         response = api.cmd(f'curl -s http://10.1.1.1:4442/tracks/{first_hop_track}/topology')
                         response_lines = response.strip().split('\n')
                         sanitized_response_lines = [line for line in response_lines if line.startswith('{')][0].strip('(venv)')
-                        print(sanitized_response_lines)
                         if len(response_lines) > 1:
                             response_json = json.loads(sanitized_response_lines)
                             sum_cost[first_hop_relay['track']] += float(response_json.get('cost', 0))
@@ -638,7 +627,7 @@ for i in range(num_of_tries):
 
 
                 with open(f"measurements/{summing_current_time}_enddelays.txt", 'a') as enddelays_file:
-                    header = f"filename(id if multiple tracks_video(bbb-vid resolution-length)_cost budget);average of timestampoverlay;deviation of timestampoverlay;baseline;avarage-baseline;number of frames;didwarn;ending time;sum cost for all subscribers on this track;following are same for all hosts rx bytes;tx bytes;rx pckts;tx pckts"
+                    header = f"filename(id if multiple tracks_video(bbb-vid resolution-length)_cost budget);average of timestampoverlay;deviation of timestampoverlay;baseline;avarage-baseline;number of frames;didwarn;ending time;sum cost for all subscribers on this track;following are same for all hosts;rx bytes;tx bytes;rx pckts;tx pckts"
                     if not file_exists:
                         enddelays_file.write(f"{header}")
                         print(f"{header}")
@@ -681,7 +670,7 @@ for i in range(num_of_tries):
                             else:
                                 ending_time=0
                                 did_it_warn=0
-                            actual_line=f"\n{file_path.replace('measurements/','')};{average};{distribution};{based_line};{average-based_line};{count};{did_it_warn};{ending_time};{sum_cost[track]};{all_network_receive_bytes};{all_network_transmit_bytes};{all_network_receive_packets};{all_network_transmit_packets}"
+                            actual_line=f"\n{file_path.replace('measurements/','')};{average};{distribution};{based_line};{average-based_line};{count};{did_it_warn};{ending_time};{sum_cost[track]};;{all_network_receive_bytes};{all_network_transmit_bytes};{all_network_receive_packets};{all_network_transmit_packets}"
                             enddelays_file.write(f"{actual_line}")
                             print(f"{actual_line}")
                             if gst_shark == 2:
@@ -693,6 +682,5 @@ for i in range(num_of_tries):
                         if gst_shark == 1:
                             print(f">> subtracting average proctimes: {average-baseline}")
 
-            topo_idx+=1
 
 

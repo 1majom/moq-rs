@@ -76,4 +76,8 @@ cargo build
 mkdir measurements
 sudo chmod +x ./dev/cert2
 
+# perf
+# echo `cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq` | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_min_freq
+
+
 echo "download this into moq-rs/dev/ https://bmeedu-my.sharepoint.com/:f:/g/personal/szenczy_balazs_edu_bme_hu/EuF3XVMjam9Ll2wUtFLoHC0BdTF_WY7xuZXNyH5xW4RqMg?e=9krJTt"
