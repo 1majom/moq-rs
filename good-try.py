@@ -100,6 +100,7 @@ for topo_idx in range(len(test_set)):
             with open(f"../cdn-optimization/datasource/{topofile}", 'r') as file:
                 config = yaml.safe_load(file)
             config['mode'] = test_set[topo_idx][2] if len(test_set[topo_idx]) > 2 else mode
+            config['api'] = test_set[topo_idx][1]
             print(f"** Sorting out the config {topofile} with {config['mode']} and {config['api']}")
 
             if config['mode'] == 'clock':
@@ -107,10 +108,12 @@ for topo_idx in range(len(test_set)):
             if forklift_certified:
                 baseline_tls_str="--tls-verify"
             subprocess.call(['sudo', 'python', 'base_try.py', '--filename', f"{current_time1}",'--track',f"{config['first_hop_relay'][0]['track']}"] + ([baseline_clk_str] if baseline_clk_str else []) + ([baseline_tls_str] if baseline_tls_str else []))
-
-            with open(baseline_path, 'r') as file:
-                baseline_content = file.read().strip()
-                based_line = float(baseline_content)
+            try:
+                with open(baseline_path, 'r') as file:
+                    baseline_content = file.read().strip()
+                    based_line = float(baseline_content)
+            except:
+                based_line=0.0
 
 
             net = Mininet( topo=None, waitConnected=True, link=partial(TCLink) )
@@ -120,7 +123,6 @@ for topo_idx in range(len(test_set)):
             switch = net.addSwitch('s1',failMode='standalone')
 
 
-            config['api'] = test_set[topo_idx][1]
             relay_number = len(config['nodes'])
 
 
@@ -137,6 +139,7 @@ for topo_idx in range(len(test_set)):
                 connections.append(connection)
                 debug(f"I see {src} to {dst} at index {connection['node1']} and {connection['node2']} with latency {connection['delay']}ms")
             edges = connections
+            print(edges)
 
 
             # print("** Baking fresh cert")
@@ -219,10 +222,13 @@ for topo_idx in range(len(test_set)):
             # *** connecting relays to each other adding delays
             for i in range(relay_number):
                 for j in range(i + 1, relay_number):
+                    searching = True
                     for edge in edges:
-                        if i+1 == edge['node1'] and j+1 == edge['node2']:
+                        if ((i+1 == edge['node1'] and j+1 == edge['node2']) or (i+1 == edge['node2'] and j+1 == edge['node1'])) and searching:
                             delay=edge['delay']
-                            break
+                            print(f"delay between {i+1} and {j+1} is {delay}")
+                            searching=False
+                            # break
                     ip1 = f"10.0.{network_counter}.1/24"
                     ip2 = f"10.0.{network_counter}.2/24"
 
@@ -244,6 +250,8 @@ for topo_idx in range(len(test_set)):
                     host2.cmd(f'ip route add 10.3.0.{i+1}/32 via {ip1}')
                     debug(f'ip route add 10.3.0.{j+1}/32 via {ip2}')
                     debug(f'ip route add 10.3.0.{i+1}/32 via {ip1}')
+                    # print ips
+                    print(f"relay {i+1} ip: {ip1} relay {j+1} ip: {ip2}")
                     network_counter += 1
                     delay=None
 
@@ -441,7 +449,7 @@ for topo_idx in range(len(test_set)):
 
 
             if all_gas_no_brakes and not my_debug:
-                sleep(max_video_duration+6)
+                sleep(max_video_duration+2)
             else:
                 CLI( net )
 
@@ -682,5 +690,6 @@ for topo_idx in range(len(test_set)):
                         if gst_shark == 1:
                             print(f">> subtracting average proctimes: {average-baseline}")
 
-
+# Change ownership of all files in the measurements directory
+subprocess.call(['sudo', 'chown', '-R', f'{the_path.user}:{the_path.user}', 'measurements'])
 
