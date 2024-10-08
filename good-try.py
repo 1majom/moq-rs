@@ -25,6 +25,7 @@ import datetime
 import subprocess
 import json
 import the_path
+import networkx as nx
 
 my_debug = os.getenv("MY_DEBUG", False)
 all_gas_no_brakes= not os.getenv("BRAKE", False)
@@ -70,6 +71,22 @@ if not os.path.exists('the_path.py'):
     exit("** the_path module is not available")
 
 test_set=the_path.test_set
+test_set_unique = list(set(item[0] for item in test_set))
+
+for topo in test_set_unique:
+    with open(f"../cdn-optimization/datasource/{topo}", 'r') as file:
+        config = yaml.safe_load(file)
+    print(f"** Sorting out the config {topo}")
+    node_names = [node['name'] for node in config['nodes']]
+
+    G = nx.Graph()
+    G.add_nodes_from(node_names)
+    for edge in config['edges']:
+        G.add_edge(edge['node1'], edge['node2'])
+    is_full_mesh = all(G.has_edge(node1, node2) for node1 in node_names for node2 in node_names if node1 != node2)
+
+    if not is_full_mesh:
+        raise ValueError(f"The nodes and edges do not form a full mesh in {topo}")
 
 for topo_idx in range(len(test_set)):
     for try_idx in range(num_of_tries):
@@ -391,12 +408,12 @@ for topo_idx in range(len(test_set)):
                 debug(f'issuing on {h} connecting to {first_hop_relay[k][0]}:\n {h} {le_cmd}')
                 # if not my_debug:
                 h.cmd(le_cmd)
-                sleep(0.7)
+                sleep(the_path.wait_between_pubs)
                 k+=1
 
             # if this is 1.5 or more it will cause problems
             # around 0.7 needed
-            sleep(3)
+            sleep(the_path.wait_after_pubs)
 
 
             k=0
@@ -423,7 +440,7 @@ for topo_idx in range(len(test_set)):
                     h.cmd(le_cmd)
 
                 debug(f'issuing on {h} connecting to {last_hop_relay[k][0]}:\n {h} {le_cmd}')
-                sleep(0.8)
+                sleep(the_path.wait_between_subs)
                 k+=1
 
             sleep(1)
