@@ -32,6 +32,7 @@ all_gas_no_brakes= not os.getenv("BRAKE", False)
 video_on = os.getenv("LOOKY", False)
 forklift_certified = not os.getenv("NO_CERT", False)
 num_of_tries = int(os.getenv("NUMERO", 1))
+no_based_line = os.getenv("NO_BASE", False)
 gst_shark = int(os.getenv("SHARK", 0))
 topofile= os.getenv("TOPO", "tiniest_topo.yaml")
 folding= os.getenv("BUILD", False)
@@ -76,7 +77,6 @@ test_set_unique = list(set(item[0] for item in test_set))
 for topo in test_set_unique:
     with open(f"../cdn-optimization/datasource/{topo}", 'r') as file:
         config = yaml.safe_load(file)
-    print(f"** Sorting out the config {topo}")
     node_names = [node['name'] for node in config['nodes']]
 
     G = nx.Graph()
@@ -87,31 +87,29 @@ for topo in test_set_unique:
 
     if not is_full_mesh:
         raise ValueError(f"The nodes and edges do not form a full mesh in {topo}")
+if __name__ == '__main__':
 
-for topo_idx in range(len(test_set)):
-    for try_idx in range(num_of_tries):
+    for topo_idx in range(len(test_set)):
+        for try_idx in range(num_of_tries):
 
-        subprocess.call(['sudo', 'mn', '-c'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        subprocess.call(['sudo', 'pkill', '-f','gst-launch'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.call(['sudo', 'mn', '-c'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.call(['sudo', 'pkill', '-f','gst-launch'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-        if my_debug or folding:
-            print("** Folding them needed binaries")
-            subprocess.run(['rm', 'target/debug/*'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            subprocess.run(['sudo', '-u', the_path.user, the_path.cargopath, 'build'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if my_debug or folding:
+                print("** Folding them needed binaries")
+                subprocess.run(['rm', 'target/debug/*'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run(['sudo', '-u', the_path.user, the_path.cargopath, 'build'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-        sleep(5)
+            sleep(5)
 
-        if __name__ == '__main__':
 
             if my_debug:
                 setLogLevel( 'info' )
             else:
                 setLogLevel( 'critical' )
             current_time1 = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-            baseline_path = os.path.join('measurements', f"assumed_baseline_{current_time1}.txt")
-            based_line=0.0
-            baseline_clk_str=""
-            baseline_tls_str=""
+
+
 
             topofile = test_set[topo_idx][0]
             with open(f"../cdn-optimization/datasource/{topofile}", 'r') as file:
@@ -120,17 +118,30 @@ for topo_idx in range(len(test_set)):
             config['api'] = test_set[topo_idx][1]
             print(f"** Sorting out the config {topofile} with {config['mode']} and {config['api']}")
 
+            baseline_clk_str=""
+            baseline_tls_str=""
+            baseline_path_clk_str=""
+
             if config['mode'] == 'clock':
                 baseline_clk_str="--clock"
+                baseline_path_clk_str="clocked_"
             if forklift_certified:
                 baseline_tls_str="--tls-verify"
-            subprocess.call(['sudo', 'python', 'base_try.py', '--filename', f"{current_time1}",'--track',f"{config['first_hop_relay'][0]['track']}"] + ([baseline_clk_str] if baseline_clk_str else []) + ([baseline_tls_str] if baseline_tls_str else []))
-            try:
+
+            baseline_path = os.path.join('measurements', f"assumed_{baseline_path_clk_str}baseline_{current_time1}.txt")
+            based_line=0.0
+
+
+
+            if not no_based_line:
+                subprocess.call(['sudo', 'python', 'base_try.py', '--filename', f"{current_time1}",'--track',f"{config['first_hop_relay'][0]['track']}"] + ([baseline_clk_str] if baseline_clk_str else []) + ([baseline_tls_str] if baseline_tls_str else []))
                 with open(baseline_path, 'r') as file:
                     baseline_content = file.read().strip()
                     based_line = float(baseline_content)
-            except:
-                based_line=0.0
+            else:
+                based_line = 0.0
+                with open(baseline_path, 'w') as file:
+                    file.write(str(based_line))
 
 
             net = Mininet( topo=None, waitConnected=True, link=partial(TCLink) )

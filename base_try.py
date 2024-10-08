@@ -44,12 +44,12 @@ def main():
     parser = argparse.ArgumentParser(description='Process some integers.')
     parser.add_argument('--filename', type=str, required=True, help='Filename for the output without .txt')
     parser.add_argument('--clock', action='store_true', help='Use clocked')
-    parser.add_argument('--tls-verify', action='store_true', help='Use tls_verify') 
+    parser.add_argument('--tls-verify', action='store_true', help='Use tls_verify')
     parser.add_argument('--track', type=str, required=True, help='Track name')
     args = parser.parse_args()
     clocked = args.clock
     tls_verify = args.tls_verify
-    
+
     setLogLevel('critical')
     template_for_relays = (
         'RUST_LOG=debug RUST_BACKTRACE=0 '
@@ -105,7 +105,7 @@ def main():
     net.start()
     baseline_sub.cmd('ip route add 12.0.1.0/30 via 12.0.2.2')
     baseline_pub.cmd('ip route add 12.0.2.0/30 via 12.0.1.2')
-    
+
     # Start the relay on one of the hosts
     baseline_relay.cmd(template_for_relays.format(
         host=baseline_relay,
@@ -162,11 +162,11 @@ def main():
             if file_latencies:
                 assumed_baseline, median, percentile_99 = calculate_statistics(file_latencies)
                 print(f"*** assumed baseline (clocked): {assumed_baseline}")
-                baseline_file = f"measurements/assumed_baseline_{filename}.txt"
+                baseline_file = f"measurements/assumed_clocked_baseline_{filename}.txt"
                 with open(baseline_file, 'w') as file:
                     file.write(str(assumed_baseline))
     net.stop()
-    
+
     subprocess.call(['sudo', 'pkill', '-f', 'xterm'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
