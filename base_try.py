@@ -44,10 +44,13 @@ def main():
     parser = argparse.ArgumentParser(description='Process some integers.')
     parser.add_argument('--filename', type=str, required=True, help='Filename for the output without .txt')
     parser.add_argument('--clock', action='store_true', help='Use clocked')
+    parser.add_argument('--clockr', action='store_true', help='Use clocked')
     parser.add_argument('--tls-verify', action='store_true', help='Use tls_verify')
     parser.add_argument('--track', type=str, required=True, help='Track name')
     args = parser.parse_args()
     clocked = args.clock
+    clockedr = args.clockr
+
     tls_verify = args.tls_verify
 
     setLogLevel('critical')
@@ -118,7 +121,7 @@ def main():
     sleep(1)
     # CLI(net)
     track = args.track
-    if not clocked:
+    if not clocked and not clockedr:
         vidi_filenammm = track.split("_")[1]
         baseline_pub.cmd(f'xterm -hold -T "baseline-pub" -e bash -c "export GST_PLUGIN_PATH="${{PWD}}/../moq-gst/target/debug${{GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}}:${{PWD}}/../6gxr-latency-clock"; gst-launch-1.0 -q -v -e filesrc location="./dev/{vidi_filenammm}.mp4"  ! qtdemux name=before01 \
     before01.video_0 ! h264parse name=before02 ! avdec_h264 name=before03 ! videoconvert name=before2 ! timestampoverlay name=middle ! videoconvert name=after1 ! x264enc tune=zerolatency name=after2 ! h264parse name=after3 ! isofmp4mux chunk-duration=1 fragment-duration=1 name=after4 ! moqsink {tls_verify_gst_str} url="https://12.0.1.2:4443" namespace="{track}";sleep 0.1 "&')
@@ -147,7 +150,7 @@ def main():
     else:
         baseline_pub.cmd(f'xterm -hold  -T "baseline-pub" -e bash -c "RUST_LOG=info ./target/debug/moq-clock --publish --namespace {track} https://12.0.1.2:4443" &')
         sleep(0.5)
-        baseline_sub.cmd(f'xterm -hold  -T "baselin-sub" -e bash -c "RUST_LOG=info ./target/debug/moq-clock --namespace {track} https://12.0.1.2:4443 {tls_verify_str} >> measurements/assumed_baseline_clock_pre_{filename}.txt" &')
+        baseline_sub.cmd(f'xterm -hold  -T "baselin-sub" -e bash -c "RUST_LOG=info ./target/debug/moq-clock --namespace {track} https://12.0.1.2:4443 {tls_verify_str} | tee measurements/assumed_baseline_clock_pre_{filename}.txt" &')
         sleep(30)
         subprocess.call(['sudo', 'pkill', '-f', 'xterm'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         file_path1 = f"measurements/assumed_baseline_clock_pre_{filename}.txt"
@@ -155,9 +158,16 @@ def main():
             file_latencies = []
             for line in file:
                 try:
-                    latency = int(line.strip()) * 1000000
-                    file_latencies.append(latency)
+                    number=int(line.strip())
+                    if clocked:
+                        latency = number*1000000
+                        file_latencies.append(latency)
+                    else:
+                        if number<1000 and clockedr:
+                            latency = number*1000000
+                            file_latencies.append(latency)
                 except ValueError:
+                    #todo
                     continue
             if file_latencies:
                 assumed_baseline, median, percentile_99 = calculate_statistics(file_latencies)

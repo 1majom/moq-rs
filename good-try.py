@@ -36,7 +36,7 @@ no_based_line = os.getenv("NO_BASE", False)
 gst_shark = int(os.getenv("SHARK", 0))
 topofile= os.getenv("TOPO", "tiniest_topo.yaml")
 folding= os.getenv("BUILD", False)
-# # gst mostly, clock, ffmpeg
+# gst mostly, clock for moq-clock, clockr cuts off seconds of first delays, ffmpeg for no measurement
 mode = os.getenv("MODE", "clock")
 
 
@@ -65,8 +65,6 @@ def extract_latency(line):
 
 if not os.geteuid() == 0:
     exit("** This script must be run as root")
-else:
-   print("** Mopping up remaining mininet")
 
 if not os.path.exists('the_path.py'):
     exit("** the_path module is not available")
@@ -91,9 +89,11 @@ if __name__ == '__main__':
 
     for topo_idx in range(len(test_set)):
         for try_idx in range(num_of_tries):
+            print("** Mopping up remaining mininet")
 
             subprocess.call(['sudo', 'mn', '-c'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             subprocess.call(['sudo', 'pkill', '-f','gst-launch'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.call(['sudo', 'pkill', '-f','xterm'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
             if my_debug or folding:
                 print("** Folding them needed binaries")
@@ -122,8 +122,8 @@ if __name__ == '__main__':
             baseline_tls_str=""
             baseline_path_clk_str=""
 
-            if config['mode'] == 'clock':
-                baseline_clk_str="--clock"
+            if config['mode'] in ['clock', 'clockr']:
+                baseline_clk_str=f"--{config['mode']}"
                 baseline_path_clk_str="clocked_"
             if forklift_certified:
                 baseline_tls_str="--tls-verify"
@@ -139,6 +139,7 @@ if __name__ == '__main__':
                     baseline_content = file.read().strip()
                     based_line = float(baseline_content)
             else:
+                print("** No baseline because debugging NO_BASE envvar")
                 based_line = 0.0
                 with open(baseline_path, 'w') as file:
                     file.write(str(based_line))
@@ -167,7 +168,6 @@ if __name__ == '__main__':
                 connections.append(connection)
                 debug(f"I see {src} to {dst} at index {connection['node1']} and {connection['node2']} with latency {connection['delay']}ms")
             edges = connections
-            print(edges)
 
 
             # print("** Baking fresh cert")
@@ -254,7 +254,7 @@ if __name__ == '__main__':
                     for edge in edges:
                         if ((i+1 == edge['node1'] and j+1 == edge['node2']) or (i+1 == edge['node2'] and j+1 == edge['node1'])) and searching:
                             delay=edge['delay']
-                            print(f"delay between {i+1} and {j+1} is {delay}")
+                            debug(f"delay between {i+1} and {j+1} is {delay}")
                             searching=False
                             # break
                     ip1 = f"10.0.{network_counter}.1/24"
@@ -278,8 +278,7 @@ if __name__ == '__main__':
                     host2.cmd(f'ip route add 10.3.0.{i+1}/32 via {ip1}')
                     debug(f'ip route add 10.3.0.{j+1}/32 via {ip2}')
                     debug(f'ip route add 10.3.0.{i+1}/32 via {ip1}')
-                    # print ips
-                    print(f"relay {i+1} ip: {ip1} relay {j+1} ip: {ip2}")
+                    debug(f"relay {i+1} ip: {ip1} relay {j+1} ip: {ip2}")
                     network_counter += 1
                     delay=None
 
@@ -288,7 +287,6 @@ if __name__ == '__main__':
             root = Node( 'root', inNamespace=False )
             intf = net.addLink( root, api ).intf1
             root.setIP( '10.2.0.99', intf=intf )
-
 
             # *** Setting up "api network"
             ip_counter = 1
@@ -381,7 +379,7 @@ if __name__ == '__main__':
                     if track_duration > max_video_duration:
                         max_video_duration = track_duration
                 else:
-                    if config['mode']=='clock':
+                    if config['mode'] in ['clock', 'clockr']:
                         try:
                             max_video_duration=int(vidi_filenammm.split("-")[2])
                         except:
@@ -390,8 +388,9 @@ if __name__ == '__main__':
                 resolution=track.split("_")[1].split("-")[1]
                 if int(resolution)>max_resolution:
                     max_resolution=int(resolution)
+                le_cmd=""
 
-                if config['mode'] == 'clock':
+                if config['mode'] in ['clock', 'clockr']:
                     le_cmd=(f'xterm -hold  -T "{h.name}-pub" -e bash -c "RUST_LOG=info ./target/debug/moq-clock --publish --namespace {track} https://{first_hop_relay[k][0]}:4443 {tls_verify_str}" &')
                 else:
                     if config['mode'] == 'ffmpeg':
@@ -432,8 +431,9 @@ if __name__ == '__main__':
                 filename = f"measurements/{track}_{current_time}_{h.name}"
                 errorfile1=f"measurements/{track}_{current_time}_{h.name}_iferror"
                 errorfile2=f"measurements/{track}_{current_time}_{h.name}_iferror2"
-                if config['mode'] == 'clock':
-                    le_cmd=(f'xterm -hold  -T "{h.name}-sub-t" -e bash -c "RUST_LOG=info ./target/debug/moq-clock --namespace {track} https://{last_hop_relay[k][0]}:4443 {tls_verify_str} >> {filename}.txt" &')
+                if config['mode'] in ['clock', 'clockr']:
+
+                    le_cmd=(f'xterm -hold  -T "{h.name}-sub-t" -e bash -c "RUST_LOG=info ./target/debug/moq-clock --namespace {track} https://{last_hop_relay[k][0]}:4443 {tls_verify_str} | tee {filename}.txt" &')
                 else:
                     if config['mode'] == 'ffmpeg':
                           le_cmd=(f'xterm -hold -T "{h.name}-sub-t" -e bash  -c "RUST_LOG=info RUST_BACKTRACE=1 ./target/debug/moq-sub --name {track} {tls_verify_str} https://{last_hop_relay[k][0]}:4443 '
@@ -473,7 +473,6 @@ if __name__ == '__main__':
                         for i in range(len(subs)):
                             sleep(0.2)
                             subprocess.call(['xdotool', 'search', '--name', f'h{i}sub', 'windowmove', f'{i*max_resolution+50}', '0'])
-
 
 
             if all_gas_no_brakes and not my_debug:
@@ -524,11 +523,14 @@ if __name__ == '__main__':
                             all_network_receive_packets += int(stats[1])
                             all_network_transmit_bytes += int(stats[8])
                             all_network_transmit_packets += int(stats[9])
+            with open(f"measurements/{current_time}_api_network.txt", 'w') as file:
+                file.write(api.cmd('cat /proc/net/dev'))
+                file.write(api.cmd('ip -br a'))
 
 
             sum_cost = {}
 
-            if config['mode'] == 'clock':
+            if config['mode'] in ['clock', 'clockr']:
                 for (h, track) in subs:
 
                     file_path1 = f"measurements/{track}_{current_time}_{h.name}.txt"
@@ -537,10 +539,13 @@ if __name__ == '__main__':
                     file_path2 = f"measurements/{track}_{current_time}_{h.name}_clocked.txt"
                     with open(file_path2, 'w') as file:
                         counter2=0
+                        # we leave out the first 5 lines because regardless of the hw resources they are always around 1 second and so spoil the averages
                         for line in output.splitlines():
                             try:
-                                latency = int(line.strip())*1000000
-                                file.write(f"{latency},{counter2}\n")
+                                number=int(line.strip())
+                                if number<1000:
+                                    latency = number*1000000
+                                    file.write(f"{latency},{counter2}\n")
 
                             except ValueError:
                                 continue
@@ -591,7 +596,7 @@ if __name__ == '__main__':
                     with open(f"{filename}_cleaned.txt", 'w') as file:
                         file.writelines(csv_lines)
 
-            if (config['mode'] == 'gst') or (config['mode'] == 'clock'):
+            if config['mode'] in ['gst','clock','clockr']:
 
                 if gst_shark>0:
                     print("latest_files: ", latest_files)
@@ -657,7 +662,7 @@ if __name__ == '__main__':
                 if config['mode'] == 'gst':
                     end_of_file_part="cleaned"
                 else:
-                    if config['mode'] == 'clock':
+                    if config['mode'] in ['clock', 'clockr']:
                         end_of_file_part="clocked"
 
 
@@ -668,10 +673,10 @@ if __name__ == '__main__':
                         enddelays_file.write(f"{header}")
                         print(f"{header}")
                     clock_str=""
-                    if config['mode'] == 'clock':
-                        clock_str="-clock"
+                    if config['mode'] in ['clock', 'clockr']:
+                        clock_str=f"-{config['mode']}"
                     enddelays_file.write(f"\n{config['api']}{clock_str}-{topofile}")
-                    print(f"{config['api']}-{topofile}")
+                    print(f"{config['mode']}-{config['api']}-{topofile}")
                     for (h,track) in subs:
                         file_path = f"measurements/{track}_{current_time}_{h.name}"
                         with open(f"{file_path}_{end_of_file_part}.txt", 'r') as file:
@@ -706,8 +711,8 @@ if __name__ == '__main__':
                             else:
                                 ending_time=0
                                 did_it_warn=0
-                            actual_line=f"\n{file_path.replace('measurements/','')};{average};{distribution};{based_line};{average-based_line};{count};{did_it_warn};{ending_time};{sum_cost[track]};;{all_network_receive_bytes};{all_network_transmit_bytes};{all_network_receive_packets};{all_network_transmit_packets}"
-                            enddelays_file.write(f"{actual_line}")
+                            actual_line=f"{file_path.replace('measurements/','')};{average};{distribution};{based_line};{average-based_line};{count};{did_it_warn};{ending_time};{sum_cost[track]};;{all_network_receive_bytes};{all_network_transmit_bytes};{all_network_receive_packets};{all_network_transmit_packets}"
+                            enddelays_file.write(f"\n{actual_line}")
                             print(f"{actual_line}")
                             if gst_shark == 2:
                                 enddelays_file.write(f">> subtracting average interlatency: {average-baseline}\n")
