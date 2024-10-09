@@ -670,7 +670,7 @@ if __name__ == '__main__':
                 with open(f"measurements/enddelays_{summing_current_time}.txt", 'a') as enddelays_file:
                     header = f"filename(id if multiple tracks_video(bbb-vid resolution-length)_cost budget);average of timestampoverlay;deviation of timestampoverlay;baseline;avarage-baseline;number of frames;didwarn;ending time;sum cost for all subscribers on this track;following are same for all hosts;rx bytes;tx bytes;rx pckts;tx pckts"
                     if not file_exists:
-                        enddelays_file.write(f"{header}")
+                        enddelays_file.write(f"\n{header}")
                         print(f"{header}")
                     clock_str=""
                     if config['mode'] in ['clock', 'clockr']:
