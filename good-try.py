@@ -561,6 +561,7 @@ if __name__ == '__main__':
                                (edge['node1'] == relayid and edge['node2'] == first_hop_relay['relayid']):
                                 sum_cost[first_hop_relay['track']] += edge['attributes']['cost']
             else:
+                number_of_used_links = 0
                 if config['api'] == 'opti':
                     sum_cost = {}
                     for first_hop_relay in config['first_hop_relay']:
@@ -572,7 +573,12 @@ if __name__ == '__main__':
                         sanitized_response_lines = [line for line in response_lines if line.startswith('{')][0].strip('(venv)')
                         if len(response_lines) > 1:
                             response_json = json.loads(sanitized_response_lines)
+                            number_of_used_links=len(response_json.get('used_links', []))
                             sum_cost[first_hop_relay['track']] += float(response_json.get('cost', 0))
+                    all_network_receive_bytes = all_network_receive_bytes/number_of_used_links
+                    all_network_receive_packets =all_network_receive_packets/number_of_used_links
+                    all_network_transmit_bytes =all_network_transmit_bytes/number_of_used_links
+                    all_network_transmit_packets =all_network_transmit_packets/number_of_used_links
 
 
 
