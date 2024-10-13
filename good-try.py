@@ -26,6 +26,7 @@ import subprocess
 import json
 import the_path
 import networkx as nx
+from collections import Counter
 
 my_debug = os.getenv("MY_DEBUG", False)
 all_gas_no_brakes= not os.getenv("BRAKE", False)
@@ -228,6 +229,7 @@ if __name__ == '__main__':
             network_counter = 0
             delay=None
             # *** connecting pubs and subs
+            pub_relays={}
             for i in range(relay_number):
                 matching_pubs = [g for g, (ip, _) in enumerate(first_hop_relay) if ip.split('.')[-1] == str(i+1)]
                 for index in matching_pubs:
@@ -237,6 +239,7 @@ if __name__ == '__main__':
                     pubs[index][0].cmd(f'ip route add 10.3.0.{i+1}/32 via 10.4.{network_counter}.{2*index+2}')
                     debug(f'ip route add 10.3.0.{i+1}/32 via 10.4.{network_counter}.{2*index+2}')
                     network_counter += 1
+                    pub_relays[str(pubs[index][1])]=(relays[i])
 
                 matching_subs = [g for g, (ip, _) in enumerate(last_hop_relay) if ip.split('.')[-1] == str(i+1)]
                 for index in matching_subs:
@@ -499,6 +502,9 @@ if __name__ == '__main__':
             all_network_receive_packets = 0
             all_network_transmit_bytes = 0
             all_network_transmit_packets = 0
+            # Count the occurrences of each unique string in the subs list
+            number_of_subscribers = Counter(track for _, track in subs)
+
             for host in net.hosts:
                 # TODO this now is be more optimal but should be checked
                 if host.name != 'h999':
@@ -510,25 +516,42 @@ if __name__ == '__main__':
                         parts = line.split()
                         interface_name = parts[0].split('@')[0]
                         ip_address = parts[2] if len(parts) > 2 else ''
-                        if '10.1.1.' not in ip_address:
+                        # we can do this because the connections between relays are on the 10.0.x.x network
+                        if '10.0.' in ip_address:
                             interface_names.append(interface_name)
                     net_dev_output = host.cmd('cat /proc/net/dev').strip().split('\n')
                     with open(f"measurements/{current_time}_{host.name}_network.txt", 'w') as file:
                         file.write('\n'.join(net_dev_output))
                         file.write('\n'.join(interfaces))
+                    divider=1
+                    # publisher side division for multiple subscribers
+                    # topobol kiszedni, hogy a publisher trackjehez hany subscriber tartozik
+
+                    if config['api'] == 'origi':
+                        for pub_host, pub_track in pubs:
+                            if pub_host == host:
+                                divider = number_of_subscribers[pub_track]
+                                print(f"divider: {divider}")
+                                break
                     for line in net_dev_output:
                         if any(interface_name in line for interface_name in interface_names):
                             stats = line.split(':')[1].split()
-                            all_network_receive_bytes += int(stats[0])
-                            all_network_receive_packets += int(stats[1])
-                            all_network_transmit_bytes += int(stats[8])
-                            all_network_transmit_packets += int(stats[9])
+                            all_network_transmit_bytes += (int(stats[8])/ divider)
+                            all_network_transmit_packets += (int(stats[9])/ divider)
+                            print(f"{(int(stats[8]))}")
+
+                            print(f"{(int(stats[8])/ divider)}")
+
+
+
             with open(f"measurements/{current_time}_api_network.txt", 'w') as file:
                 file.write(api.cmd('cat /proc/net/dev'))
+                file.write("\n")
                 file.write(api.cmd('ip -br a'))
 
 
             sum_cost = {}
+            sum_underlay_length = {}
 
             if config['mode'] in ['clock', 'clockr']:
                 for (h, track) in subs:
@@ -555,11 +578,18 @@ if __name__ == '__main__':
                     first_hop_track = first_hop_relay['track']
                     relevant_last_hop_relays = [item['relayid'] for item in config['last_hop_relay'] if item['track'] == first_hop_track]
                     sum_cost[first_hop_relay['track']] = 0
+                    sum_underlay_length[first_hop_relay['track']] = 0
                     for relayid in relevant_last_hop_relays:
                         for edge in config['edges']:
                             if (edge['node1'] == first_hop_relay['relayid'] and edge['node2'] == relayid) or \
                                (edge['node1'] == relayid and edge['node2'] == first_hop_relay['relayid']):
                                 sum_cost[first_hop_relay['track']] += edge['attributes']['cost']
+                                sum_underlay_length[first_hop_relay['track']] += edge['attributes'].get('underlay_length', 1)
+                    all_network_receive_bytes = all_network_receive_bytes*sum_underlay_length[first_hop_relay['track']]
+                    all_network_receive_packets =all_network_receive_packets*sum_underlay_length[first_hop_relay['track']]
+                    all_network_transmit_bytes =all_network_transmit_bytes*sum_underlay_length[first_hop_relay['track']]
+                    all_network_transmit_packets =all_network_transmit_packets*sum_underlay_length[first_hop_relay['track']]
+
             else:
                 number_of_used_links = 0
                 if config['api'] == 'opti':
@@ -575,10 +605,10 @@ if __name__ == '__main__':
                             response_json = json.loads(sanitized_response_lines)
                             number_of_used_links=len(response_json.get('used_links', []))
                             sum_cost[first_hop_relay['track']] += float(response_json.get('cost', 0))
-                    all_network_receive_bytes = all_network_receive_bytes/number_of_used_links
-                    all_network_receive_packets =all_network_receive_packets/number_of_used_links
-                    all_network_transmit_bytes =all_network_transmit_bytes/number_of_used_links
-                    all_network_transmit_packets =all_network_transmit_packets/number_of_used_links
+                    # all_network_receive_bytes = all_network_receive_bytes/number_of_used_links
+                    # all_network_receive_packets =all_network_receive_packets/number_of_used_links
+                    # all_network_transmit_bytes =all_network_transmit_bytes/number_of_used_links
+                    # all_network_transmit_packets =all_network_transmit_packets/number_of_used_links
 
 
 
@@ -674,7 +704,7 @@ if __name__ == '__main__':
 
 
                 with open(f"measurements/enddelays_{summing_current_time}.txt", 'a') as enddelays_file:
-                    header = f"filename(id if multiple tracks_video(bbb-vid resolution-length)_cost budget);average of timestampoverlay;deviation of timestampoverlay;baseline;avarage-baseline;number of frames;didwarn;ending time;sum cost for all subscribers on this track;following are same for all hosts;rx bytes;tx bytes;rx pckts;tx pckts"
+                    header = f"filename;average of timestamps;deviation of timestamps;baseline;avarage-baseline;number of frames;ending time;sum cost for all subs on track;tx bytes for all;tx pckts for all"
                     if not file_exists:
                         enddelays_file.write(f"\n{header}")
                         print(f"{header}")
@@ -717,7 +747,7 @@ if __name__ == '__main__':
                             else:
                                 ending_time=0
                                 did_it_warn=0
-                            actual_line=f"{file_path.replace('measurements/','')};{average};{distribution};{based_line};{average-based_line};{count};{did_it_warn};{ending_time};{sum_cost[track]};;{all_network_receive_bytes};{all_network_transmit_bytes};{all_network_receive_packets};{all_network_transmit_packets}"
+                            actual_line=f"{file_path.replace('measurements/','')};{average};{distribution};{based_line};{average-based_line};{count};{ending_time};{sum_cost[track]};{all_network_transmit_bytes};{all_network_transmit_packets}"
                             enddelays_file.write(f"\n{actual_line}")
                             print(f"{actual_line}")
                             if gst_shark == 2:
