@@ -535,6 +535,8 @@ if __name__ == '__main__':
                             stats = line.split(':')[1].split()
                             all_network_transmit_bytes += (int(stats[8])/ divider)
                             all_network_transmit_packets += (int(stats[9])/ divider)
+                            if divider != 1:
+                               print(f"transmit: {int(stats[8])} / {divider} = {int(stats[8])/ divider}")
 
 
 
@@ -580,9 +582,9 @@ if __name__ == '__main__':
                                 sum_cost[first_hop_relay['track']] += edge['attributes']['cost']
                                 sum_underlay_length[first_hop_relay['track']] += edge['attributes'].get('underlay_length', 1)
                     all_network_receive_bytes = all_network_receive_bytes*sum_underlay_length[first_hop_relay['track']]
-                    all_network_receive_packets =all_network_receive_packets*sum_underlay_length[first_hop_relay['track']]
-                    all_network_transmit_bytes =all_network_transmit_bytes*sum_underlay_length[first_hop_relay['track']]
-                    all_network_transmit_packets =all_network_transmit_packets*sum_underlay_length[first_hop_relay['track']]
+                    all_network_receive_packets = all_network_receive_packets*sum_underlay_length[first_hop_relay['track']]
+                    all_network_transmit_bytes = all_network_transmit_bytes*sum_underlay_length[first_hop_relay['track']]
+                    all_network_transmit_packets = all_network_transmit_packets*sum_underlay_length[first_hop_relay['track']]
 
             else:
                 number_of_used_links = 0
@@ -623,7 +625,7 @@ if __name__ == '__main__':
                         file.writelines(csv_lines)
 
             if config['mode'] in ['gst','clock','clockr']:
-				# todo this is not useable rightnow
+                # todo this is not useable rightnow
                 if gst_shark>0:
                     print("latest_files: ", latest_files)
                     baseline_files = glob.glob(os.path.join(folder_path, 'baseline*'))
