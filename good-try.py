@@ -697,14 +697,14 @@ if __name__ == '__main__':
 
 
                 with open(f"measurements/enddelays_{summing_current_time}.txt", 'a') as enddelays_file:
-                    header = f"filename;average of timestamps;deviation of timestamps;baseline;avarage-baseline;number of frames;ending time;sum cost for all subs on track;tx bytes for all;tx pckts for all"
+                    header = f"meas. time;track__host;topo;api;average of timestamps;deviation of timestamps;baseline;avarage-baseline;number of frames;ending time;sum cost for all subs on track;tx bytes for all;tx pckts for all"
                     if not file_exists:
                         enddelays_file.write(f"\n{header}")
                         print(f"{header}")
                     clock_str=""
                     if config['mode'] in ['clock', 'clockr']:
                         clock_str = f"-{config['mode']}"
-                    enddelays_file.write(f"\n{config['api']}{clock_str}-{topofile}")
+                    enddelays_file.write(f"\n---")
                     print(f"{config['mode']}-{config['api']}-{topofile}")
                     for (h,track) in subs:
                         file_path = f"measurements/{track}_{current_time}_{h.name}"
@@ -740,7 +740,10 @@ if __name__ == '__main__':
                             else:
                                 ending_time = 0
                                 did_it_warn = 0
-                            actual_line = f"{file_path.replace('measurements/','')};{average};{distribution};{based_line};{average-based_line};{count};{ending_time};{sum_cost[track]};{all_network_transmit_bytes};{all_network_transmit_packets}"
+                            file_name_parts = file_path.replace('measurements/', '').split('_')
+                            a = file_name_parts[-2]
+                            b = '_'.join(file_name_parts[:-2]) + '__' + file_name_parts[-1]
+                            actual_line = f"{a};{clock_str}{b};{topofile.replace('.yaml','')};{config['api']};{average};{distribution};{based_line};{average-based_line};{count};{ending_time};{sum_cost[track]};{all_network_transmit_bytes};{all_network_transmit_packets}"
                             enddelays_file.write(f"\n{actual_line}")
                             print(f"{actual_line}")
                             if gst_shark == 2:
