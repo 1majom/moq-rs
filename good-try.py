@@ -517,6 +517,7 @@ if __name__ == '__main__':
                     net_dev_output = host.cmd('cat /proc/net/dev').strip().split('\n')
                     with open(f"measurements/{current_time}_{host.name}_network.txt", 'w') as file:
                         file.write('\n'.join(net_dev_output))
+                        file.write("\n")
                         file.write('\n'.join(interfaces))
 
                     # publisher side division for multiple subscribers
