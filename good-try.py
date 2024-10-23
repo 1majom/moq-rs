@@ -534,10 +534,12 @@ if __name__ == '__main__':
                     for line in net_dev_output:
                         if any(interface_name in line for interface_name in interface_names):
                             stats = line.split(':')[1].split()
-                            all_network_transmit_bytes += (int(stats[8])/ divider)
-                            all_network_transmit_packets += (int(stats[9])/ divider)
-                            if divider != 1:
-                               print(f"transmit: {int(stats[8])} / {divider} = {int(stats[8])/ divider}")
+                            # with our 720p test video around 726-900 bytes or around 20 packets of control info can happen on even inactive interfaces
+                            if int(stats[8]) > 1100 and int(stats[9]) > 50:
+                                all_network_transmit_bytes += (int(stats[8])/ divider)
+                                all_network_transmit_packets += (int(stats[9])/ divider)
+                                if divider != 1:
+                                   print(f"transmit: {int(stats[8])} / {divider} = {int(stats[8])/ divider}")
 
 
 
