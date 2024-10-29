@@ -1,18 +1,30 @@
 
 ### About this branch
 
-This project tries to put the very well written Media over QUIC implementation, moq-rs into a custom topology inside mininet.
+This project tries to put the very well written Media over QUIC implementation, moq-rs into a custom topology inside mininet. Before the changes of moqtransfork.
 The project is closely connected to [Zotyamester/cdn-optimizer](https://github.com/Zotyamester/cdn-optimization) (later referenced as cdn-opti) which can be used as an alternative api instead of the moq-api provided by the original project. The main difference between these that with moq-api the subscriber's relay will always get the publisher's relay without any inbetween relays, only using one link from our relay mesh network. The cdn-opti instead will use the provided costs to calculate a more optimal route while using more then 1 links.
 
-For the whole project to work on a fresh **Ubuntu 22.04** machine the vm_start.sh file should be downloaded alone and ran in the folder where we want to see the moq-rs and other projects folders. Also a the_path.py file is needed to be created inside that we only need a variable called PATH_GO which tells the exact path to the go binary. And also a venv variable which is all is correctly set up should be the command activeting the venv under the venv folder. - this is wip
-
-Right now (this is also wip) to start the good_try.py mininet script we need a topology file. Now these topology files are gotten from the cdn-opti repo which should be cloned next to this one so it can be reached.
-
-Here is a sample topology file:
+For the whole project to work on a fresh **Ubuntu 22.04** machine the vm_start.sh file should be downloaded alone and ran in the folder where we want to see the moq-rs and other projects folders. Also a the_path.py file is needed to be created inside that we the following. And also a venv variable which is all is correctly set up should be the command activating the venv under the venv folder.
+```
+PATH_GO=# ':' and the path to go
+venv=# source and the venv activate file or nothing if the needed python modules for the cdn-opti are installed systemwide
+user=# insert echo $USER here
+cargopath=# the path to the cargo bin
+test_set = [
+	#the wanted tests as a list of tuples, first the topology file, then the wanted API (origi or opti), and lastly clock or gst, latter is better right now
+	#two examples
+    # ("small_topo_ps.yaml","origi", "gst"),
+    # ("small_topo_ps_yaml","opti", "gst"), 
+]
+# the following are wait times
+wait_between_pubs=3
+wait_after_pubs=2
+wait_between_subs=0.8
 ```
 
-api: "opti" 
-mode: "gst" 
+Right now to start the good_try.py mininet script we need a topology file. These topology files are gotten from the cdn-opti repo which should be cloned next to this one so it can be reached.
+Here is a sample topology file:
+```
 first_hop_relay:
   - relayid: "node1"
     track: "bbb-720_1000"
@@ -36,29 +48,24 @@ edges:
     attributes:
       latency: 0
       cost: 0.01
-
+	  underlay_length: 1
 ```
-- the api can be opti, which is the cdn-opti or origi, which will use the moq-api the mode should be gst this 
-way we will get the latency information about the participating clients. other options are: 'clock' which will 
-use the moq-clock applicaton as clients, or 'ffmpeg' which simply starts the stream while displaying the video
 
-- nodes: we can define the relays
+- nodes: are the relays, which can be used in edges, also the length of this list will imply how many relays are there in the topology
 
-- edges: are the connections between the relays. the provided latency will be applied to the mininet topology, and the cost will be used by the cdn-opti api.
+- edges: are the connections between the relays. the provided latency will be applied to the mininet topology, and the cost will be used by the cdn-opti api, the underlay_length will be used when evaluating the measurements
 
-- in the following list we can provide the publishers by specifing their starting relay and the track name that they will use
+- in the following list we can provide the publishers by specifying their starting relay and the track name that they will use
 
-- it is important that the trackname should follow the following nameing convention: 
-  - {id, with one publisher it is not needed}\_{the filename of the wanted video w/o .mp4}\_{the bost budget that the cdn-opti should use}
+- it is important that the trackname should follow the following naming convention: 
+  - {id, with one publisher it is not needed}\_{the filename of the wanted video w/o .mp4}\_{the cost budget that the cdn-opti should use}
 
-- filename provided by downloading the videofiles (the first few are converted to that resolution, the latter ones are cut to 30secs) from the vm_start.sh:
+- filename provided by downloading the video files (the first few are converted to that resolution, the latter ones are cut to 30secs) from the vm_start.sh:
 
   - bbb-{720|480|360|720-30|480-30|360-30}
 
-- its important that each relay can only have 1 publisher/subsciber
-
-
-All used topology files can be found in cdn-opti repo under the datasources folder
+- its important that each relay can only have 1 publisher/subscriber when using the cdn-opti
+- All used topology files can be found in cdn-opti repo under the datasources folder
 
 Bellow we can see the original readme of the moq-rs project.
 
