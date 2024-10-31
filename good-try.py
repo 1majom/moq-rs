@@ -70,7 +70,7 @@ if not os.geteuid() == 0:
 if not os.path.exists('the_path.py'):
     exit("** the_path module is not available")
 
-test_set=the_path.test_set
+test_set = the_path.test_set
 test_set_unique = list(set(item[0] for item in test_set))
 
 # Checking all the topo files if they have all the edges
@@ -120,17 +120,17 @@ if __name__ == '__main__':
             config['api'] = test_set[topo_idx][1]
             print(f"** Sorting out the config {topofile} with {config['mode']} and {config['api']}")
 
-            baseline_clk_str=""
-            baseline_tls_str=""
-            baseline_path_clk_str=""
+            baseline_clk_str = ""
+            baseline_tls_str = ""
+            baseline_path_clk_str = ""
             if config['mode'] in ['clock', 'clockr']:
-                baseline_clk_str=f"--{config['mode']}"
-                baseline_path_clk_str="clocked_"
+                baseline_clk_str = f"--{config['mode']}"
+                baseline_path_clk_str = "clocked_"
             if forklift_certified:
-                baseline_tls_str="--tls-verify"
+                baseline_tls_str = "--tls-verify"
 
             baseline_path = os.path.join('measurements', f"assumed_{baseline_path_clk_str}baseline_{current_time1}.txt")
-            based_line=0.0
+            based_line = 0.0
             if not no_based_line:
                 subprocess.call(['sudo', 'python', 'base_try.py', '--filename', f"{current_time1}",'--track',f"{config['first_hop_relay'][0]['track']}"] + ([baseline_clk_str] if baseline_clk_str else []) + ([baseline_tls_str] if baseline_tls_str else []))
                 with open(baseline_path, 'r') as file:
@@ -195,7 +195,7 @@ if __name__ == '__main__':
             relays = []
             pubs = []
             subs= []
-            k=1
+            k = 1
 
 
             # ** Creating hosts
@@ -521,7 +521,7 @@ if __name__ == '__main__':
                         file.write('\n'.join(interfaces))
 
                     # publisher side division for multiple subscribers
-                    # from the topo we change the diver at the publisher to the number of subscribers of that track
+                    # from the topo we change the divider at the publisher to the number of subscribers of that track
                     # this because after the calc we will multiple by the link length which contains publisher relays
                     # transmitting interfaces already as many times as many subscribers are.
                     divider = 1
